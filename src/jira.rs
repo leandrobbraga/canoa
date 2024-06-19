@@ -1,4 +1,6 @@
-/// Jira's API implementation
+//! Jira's API implementation
+use std::iter;
+
 const BASE64TABLE: [u8; 64] = [
     b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H', b'I', b'J', b'K', b'L', b'M', b'N', b'O', b'P',
     b'Q', b'R', b'S', b'T', b'U', b'V', b'W', b'X', b'Y', b'Z', b'a', b'b', b'c', b'd', b'e', b'f',
@@ -19,37 +21,40 @@ fn basic_authentication_header(user: &str, token: &str) -> String {
     header.extend_from_slice(b"Basic ");
 
     let input_lenght = user.len() + token.len() + 1;
-    let chunks = input_lenght / 3;
+    let chunk_size = 3;
+    let chunk_count = input_lenght / chunk_size;
 
     let mut iterator = user.bytes().chain(":".bytes()).chain(token.bytes());
 
-    for _ in 0..chunks {
+    for _ in 0..chunk_count {
+        // SAFETY: We pre-calculated that this iterator have at least this amount of elements or
+        // more
         let n = unsafe {
             (iterator.next().unwrap_unchecked() as usize) << 16
                 | (iterator.next().unwrap_unchecked() as usize) << 8
                 | (iterator.next().unwrap_unchecked() as usize)
         };
 
-        header.push(BASE64TABLE[(n >> 18) & 63]);
-        header.push(BASE64TABLE[(n >> 12) & 63]);
-        header.push(BASE64TABLE[(n >> 6) & 63]);
-        header.push(BASE64TABLE[n & 63]);
+        header.extend([
+            BASE64TABLE[(n >> 18) & 63],
+            BASE64TABLE[(n >> 12) & 63],
+            BASE64TABLE[(n >> 6) & 63],
+            BASE64TABLE[n & 63],
+        ]);
     }
 
     // Remaining, if it exists
     let mut n = 0;
     for (index, byte) in iterator.enumerate() {
-        n |= (byte as usize) << (16 - 8 * (index % 3));
+        n |= (byte as usize) << (16 - 8 * (index % chunk_size));
     }
 
-    for index in 0..input_lenght - chunks * 3 + 1 {
-        header.push(BASE64TABLE[(n >> 6 * (3 - index)) & 63]);
+    for index in 0..input_lenght - chunk_count * chunk_size + 1 {
+        header.push(BASE64TABLE[(n >> 6 * (chunk_size - index)) & 63]);
     }
 
     // Padding to fill the end
-    for _ in header.len()..header.capacity() {
-        header.push(b'=');
-    }
+    header.extend(iter::repeat(b'=').take(header.capacity() - header.len()));
 
     // SAFETY: The header is made of two parts: the 'Basic ' prefix and the Base64 encoded string,
     // both are UTF-8
