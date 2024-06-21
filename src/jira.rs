@@ -1,6 +1,131 @@
 //! Jira's API implementation
 use std::iter;
 
+use serde::Deserialize;
+
+pub struct Jira {
+    authorization: Box<str>,
+    host: Box<str>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Sprint {
+    id: u32,
+    name: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct Issue {
+    #[serde(rename(deserialize = "key"))]
+    name: String,
+    fields: IssueFields,
+}
+
+#[derive(Deserialize, Debug)]
+struct IssueFields {
+    summary: String,
+    #[serde(
+        rename(deserialize = "issuetype"),
+        deserialize_with = "deserialize_type"
+    )]
+    kind: String,
+    #[serde(deserialize_with = "deserialize_assigne")]
+    assignee: Option<String>,
+    #[serde(deserialize_with = "deserialize_status")]
+    status: Option<String>,
+}
+
+fn deserialize_type<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Outer {
+        name: String,
+    }
+
+    Outer::deserialize(deserializer).map(|o| o.name)
+}
+
+fn deserialize_assigne<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Outer {
+        #[serde(rename(deserialize = "displayName"))]
+        display_name: String,
+    }
+
+    Option::<Outer>::deserialize(deserializer).map(|o| match o {
+        Some(v) => Some(v.display_name),
+        None => None,
+    })
+}
+
+fn deserialize_status<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Outer {
+        name: String,
+    }
+
+    Option::<Outer>::deserialize(deserializer).map(|o| match o {
+        Some(v) => Some(v.name),
+        None => None,
+    })
+}
+
+impl Jira {
+    pub fn new(user: &str, token: &str, host: Box<str>) -> Self {
+        Self {
+            authorization: basic_authentication_header(user, token),
+            host,
+        }
+    }
+    pub fn get_sprint_issues(&self, board_id: &str, sprint_id: &str) {
+        #[derive(Deserialize)]
+        struct Response {
+            issues: Vec<Issue>,
+        }
+
+        let a: Response = ureq::get(&format!(
+            "{}rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue",
+            self.host.as_ref()
+        ))
+        .set("Authorization", &self.authorization.as_ref())
+        .query("fields", "summary, status, labels, assignee, issuetype")
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+
+        println!("{:?}", a.issues);
+    }
+
+    pub fn get_board_active_sprints(&self, board_id: &str) {
+        #[derive(Deserialize)]
+        struct Response {
+            values: Vec<Sprint>,
+        }
+
+        let a: Response = ureq::get(&format!(
+            "{}rest/agile/1.0/board/{board_id}/sprint",
+            self.host.as_ref()
+        ))
+        .set("Authorization", &self.authorization.as_ref())
+        .query("state", "active")
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+
+        println!("{:?}", a.values);
+    }
+}
+
 const BASE64TABLE: [u8; 64] = [
     b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H', b'I', b'J', b'K', b'L', b'M', b'N', b'O', b'P',
     b'Q', b'R', b'S', b'T', b'U', b'V', b'W', b'X', b'Y', b'Z', b'a', b'b', b'c', b'd', b'e', b'f',
@@ -12,7 +137,7 @@ const BASE64TABLE: [u8; 64] = [
 /// a password when making a request. To perform it the agent should include a header in the
 /// form of Authorization: Basic <credentials>, where <credentials> is the Base64 encoding of
 /// '<user>:<password>'.
-pub fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
+fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
     // The output length is calculated by the 'Basic ' prefix size (6 chars) added to the encoded
     // credentials, which yields 4 characters for every triplet (including incomplete triplets)
     // after encoded in Base64.
@@ -44,17 +169,21 @@ pub fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
     }
 
     // Remaining, if it exists
-    let mut n = 0;
-    for (index, byte) in iterator.enumerate() {
-        n |= (byte as usize) << (16 - 8 * (index % chunk_size));
-    }
+    if input_lenght % 3 != 0 {
+        let mut n = 0;
+        let mut index = 0;
+        for byte in iterator {
+            n |= (byte as usize) << (16 - 8 * (index % chunk_size));
+            index += 1;
+        }
 
-    for index in 0..input_lenght - chunk_count * chunk_size + 1 {
-        header.push(BASE64TABLE[n >> (6 * (chunk_size - index)) & 63]);
-    }
+        for index in 0..index + 1 {
+            header.push(BASE64TABLE[n >> (6 * (chunk_size - index)) & 63]);
+        }
 
-    // Padding to fill the end
-    header.extend(iter::repeat(b'=').take(header.capacity() - header.len()));
+        // Padding to fill the end
+        header.extend(iter::repeat(b'=').take(output_lenght - header.len()));
+    }
 
     // SAFETY: The header is made of two parts: the 'Basic ' prefix and the Base64 encoded string,
     // both are UTF-8
