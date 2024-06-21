@@ -47,7 +47,7 @@ fn parse_dotenv() -> Result<HashMap<String, String>, ()> {
 
     let mut view = content.as_slice();
 
-    while view.len() > 0 {
+    while !view.is_empty() {
         let (variable, value) = parse_variable(&mut view)?;
         variables.insert(variable, value);
     }
@@ -56,7 +56,7 @@ fn parse_dotenv() -> Result<HashMap<String, String>, ()> {
 }
 
 fn parse_variable(content: &mut &[u8]) -> Result<(String, String), ()> {
-    if content.len() == 0 {
+    if content.is_empty() {
         eprintln!("ERROR: the config file does not contain the user and token.");
         return Err(());
     }

@@ -50,7 +50,7 @@ fn basic_authentication_header(user: &str, token: &str) -> String {
     }
 
     for index in 0..input_lenght - chunk_count * chunk_size + 1 {
-        header.push(BASE64TABLE[(n >> 6 * (chunk_size - index)) & 63]);
+        header.push(BASE64TABLE[n >> (6 * (chunk_size - index)) & 63]);
     }
 
     // Padding to fill the end
