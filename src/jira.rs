@@ -12,7 +12,7 @@ const BASE64TABLE: [u8; 64] = [
 /// a password when making a request. To perform it the agent should include a header in the
 /// form of Authorization: Basic <credentials>, where <credentials> is the Base64 encoding of
 /// '<user>:<password>'.
-fn basic_authentication_header(user: &str, token: &str) -> String {
+pub fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
     // The output length is calculated by the 'Basic ' prefix size (6 chars) added to the encoded
     // credentials, which yields 4 characters for every triplet (including incomplete triplets)
     // after encoded in Base64.
@@ -58,7 +58,7 @@ fn basic_authentication_header(user: &str, token: &str) -> String {
 
     // SAFETY: The header is made of two parts: the 'Basic ' prefix and the Base64 encoded string,
     // both are UTF-8
-    unsafe { String::from_utf8_unchecked(header) }
+    unsafe { String::from_utf8_unchecked(header).into_boxed_str() }
 }
 
 #[cfg(test)]
@@ -68,18 +68,18 @@ mod test {
     #[test]
     fn encode_test() {
         let result = basic_authentication_header("user", "password");
-        assert_eq!(result.as_str(), "Basic dXNlcjpwYXNzd29yZA==")
+        assert_eq!(result.as_ref(), "Basic dXNlcjpwYXNzd29yZA==")
     }
 
     #[test]
     fn encode_longer() {
         let result = basic_authentication_header("user", "difficult password");
-        assert_eq!(result.as_str(), "Basic dXNlcjpkaWZmaWN1bHQgcGFzc3dvcmQ=")
+        assert_eq!(result.as_ref(), "Basic dXNlcjpkaWZmaWN1bHQgcGFzc3dvcmQ=")
     }
 
     #[test]
     fn encode_strange() {
         let result = basic_authentication_header("user", "$7r4n/ge$741ng");
-        assert_eq!(result.as_str(), "Basic dXNlcjokN3I0bi9nZSQ3NDFuZw==")
+        assert_eq!(result.as_ref(), "Basic dXNlcjokN3I0bi9nZSQ3NDFuZw==")
     }
 }
