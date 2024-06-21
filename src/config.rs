@@ -9,27 +9,27 @@ pub struct Config {
 /// Extract the configuration struct from the environment variables or the `.env` file, giving
 /// precedente to the environment variables.
 pub fn configuration() -> Result<Config, ()> {
-    match (std::env::var("USER"), std::env::var("TOKEN)")) {
+    match (std::env::var("JIRA_USER"), std::env::var("JIRA_TOKEN)")) {
         (Ok(user), Ok(token)) => Ok(Config { user, token }),
         (Ok(user), Err(_)) => {
             let mut variables = parse_dotenv()?;
 
-            let token = variables.remove("TOKEN").ok_or(())?;
+            let token = variables.remove("JIRA_TOKEN").ok_or(())?;
 
             Ok(Config { user, token })
         }
         (Err(_), Ok(token)) => {
             let mut variables = parse_dotenv()?;
 
-            let user = variables.remove("USER").ok_or(())?;
+            let user = variables.remove("JIRA_USER").ok_or(())?;
 
             Ok(Config { user, token })
         }
         (Err(_), Err(_)) => {
             let mut variables = parse_dotenv()?;
 
-            let user = variables.remove("USER").ok_or(())?;
-            let token = variables.remove("TOKEN").ok_or(())?;
+            let user = variables.remove("JIRA_USER").ok_or(())?;
+            let token = variables.remove("JIRA_TOKEN").ok_or(())?;
 
             Ok(Config { user, token })
         }
