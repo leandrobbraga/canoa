@@ -2,38 +2,36 @@ use std::collections::HashMap;
 use std::{fs::File, io::Read};
 
 pub struct Config {
-    pub user: String,
-    pub token: String,
+    pub user: Box<str>,
+    pub token: Box<str>,
+    pub board_id: Box<str>,
+    pub host: Box<str>,
 }
 
 /// Extract the configuration struct from the environment variables or the `.env` file, giving
 /// precedente to the environment variables.
 pub fn configuration() -> Result<Config, ()> {
-    match (std::env::var("JIRA_USER"), std::env::var("JIRA_TOKEN)")) {
-        (Ok(user), Ok(token)) => Ok(Config { user, token }),
-        (Ok(user), Err(_)) => {
-            let mut variables = parse_dotenv()?;
+    let mut variables = parse_dotenv()?;
 
-            let token = variables.remove("JIRA_TOKEN").ok_or(())?;
+    // Give precedence to the environment variables
+    let mut get_variable = |key: &str| {
+        std::env::var(key)
+            .or_else(|_| variables.remove(key).ok_or(()))
+            .map(|value| value.into_boxed_str())
+            .map_err(|_| println!("ERROR: Missing variable {key}"))
+    };
 
-            Ok(Config { user, token })
-        }
-        (Err(_), Ok(token)) => {
-            let mut variables = parse_dotenv()?;
+    let user = get_variable("JIRA_USER")?;
+    let token = get_variable("JIRA_TOKEN")?;
+    let board_id = get_variable("JIRA_BOARD_ID")?;
+    let host = get_variable("JIRA_HOST")?;
 
-            let user = variables.remove("JIRA_USER").ok_or(())?;
-
-            Ok(Config { user, token })
-        }
-        (Err(_), Err(_)) => {
-            let mut variables = parse_dotenv()?;
-
-            let user = variables.remove("JIRA_USER").ok_or(())?;
-            let token = variables.remove("JIRA_TOKEN").ok_or(())?;
-
-            Ok(Config { user, token })
-        }
-    }
+    Ok(Config {
+        user,
+        token,
+        board_id,
+        host,
+    })
 }
 
 fn parse_dotenv() -> Result<HashMap<String, String>, ()> {
