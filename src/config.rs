@@ -50,17 +50,13 @@ fn parse_dotenv() -> Result<HashMap<String, String>, ()> {
     while !view.is_empty() {
         let (variable, value) = parse_variable(&mut view)?;
         variables.insert(variable, value);
+        trim_left_whitespaces(&mut view);
     }
 
     Ok(variables)
 }
 
 fn parse_variable(content: &mut &[u8]) -> Result<(String, String), ()> {
-    if content.is_empty() {
-        eprintln!("ERROR: the config file does not contain the user and token.");
-        return Err(());
-    }
-
     let mut variable_index = 0;
     while variable_index < content.len() && content[variable_index] != b'=' {
         variable_index += 1;
@@ -79,4 +75,13 @@ fn parse_variable(content: &mut &[u8]) -> Result<(String, String), ()> {
     *content = &content[value_index + 1..];
 
     Ok((variable, value))
+}
+
+fn trim_left_whitespaces(content: &mut &[u8]) {
+    let mut index = 0;
+    while index < content.len() && content[index].is_ascii_whitespace() {
+        index += 1;
+    }
+
+    *content = &content[index..]
 }
