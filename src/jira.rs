@@ -9,30 +9,31 @@ pub struct Jira {
 }
 
 #[derive(Deserialize, Debug)]
-struct Sprint {
-    id: u32,
-    name: String,
+pub struct Sprint {
+    pub id: u32,
+    pub name: String,
+    pub state: String,
 }
 
 #[derive(Deserialize, Debug)]
-struct Issue {
+pub struct Issue {
     #[serde(rename(deserialize = "key"))]
-    name: String,
-    fields: IssueFields,
+    pub name: String,
+    pub fields: IssueFields,
 }
 
 #[derive(Deserialize, Debug)]
-struct IssueFields {
-    summary: String,
+pub struct IssueFields {
+    pub summary: String,
     #[serde(
         rename(deserialize = "issuetype"),
         deserialize_with = "deserialize_type"
     )]
-    kind: String,
+    pub kind: String,
     #[serde(deserialize_with = "deserialize_assigne")]
-    assignee: Option<String>,
+    pub assignee: Option<String>,
     #[serde(deserialize_with = "deserialize_status")]
-    status: Option<String>,
+    pub status: String,
 }
 
 fn deserialize_type<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -63,7 +64,7 @@ where
     })
 }
 
-fn deserialize_status<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+fn deserialize_status<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::de::Deserializer<'de>,
 {
@@ -72,10 +73,7 @@ where
         name: String,
     }
 
-    Option::<Outer>::deserialize(deserializer).map(|o| match o {
-        Some(v) => Some(v.name),
-        None => None,
-    })
+    Outer::deserialize(deserializer).map(|o| o.name)
 }
 
 impl Jira {
@@ -85,13 +83,15 @@ impl Jira {
             host,
         }
     }
-    pub fn get_sprint_issues(&self, board_id: &str, sprint_id: &str) {
+
+    #[must_use]
+    pub fn get_sprint_issues(&self, board_id: &str, sprint_id: &str) -> Vec<Issue> {
         #[derive(Deserialize)]
         struct Response {
             issues: Vec<Issue>,
         }
 
-        let a: Response = ureq::get(&format!(
+        let response: Response = ureq::get(&format!(
             "{}rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue",
             self.host.as_ref()
         ))
@@ -102,27 +102,50 @@ impl Jira {
         .into_json()
         .unwrap();
 
-        println!("{:?}", a.issues);
+        response.issues
     }
 
-    pub fn get_board_active_sprints(&self, board_id: &str) {
+    #[must_use]
+    pub fn get_board_active_and_future_sprints(&self, board_id: &str) -> Vec<Sprint> {
         #[derive(Deserialize)]
         struct Response {
-            values: Vec<Sprint>,
+            #[serde(rename(deserialize = "values"))]
+            sprints: Vec<Sprint>,
         }
 
-        let a: Response = ureq::get(&format!(
+        let response: Response = ureq::get(&format!(
             "{}rest/agile/1.0/board/{board_id}/sprint",
             self.host.as_ref()
         ))
         .set("Authorization", &self.authorization.as_ref())
-        .query("state", "active")
+        .query("state", "active, future")
         .call()
         .unwrap()
         .into_json()
         .unwrap();
 
-        println!("{:?}", a.values);
+        response.sprints
+    }
+
+    #[must_use]
+    pub fn get_backlog_issues(&self, board_id: &str) -> Vec<Issue> {
+        #[derive(Deserialize)]
+        struct Response {
+            issues: Vec<Issue>,
+        }
+
+        let response: Response = ureq::get(&format!(
+            "{}rest/agile/1.0/board/{board_id}/backlog",
+            self.host.as_ref()
+        ))
+        .set("Authorization", &self.authorization.as_ref())
+        .query("fields", "summary, status, labels, assignee, issuetype")
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+
+        response.issues
     }
 }
 
