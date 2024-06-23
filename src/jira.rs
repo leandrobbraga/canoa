@@ -175,8 +175,7 @@ fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
     let mut iterator = user.bytes().chain(":".bytes()).chain(token.bytes());
 
     for _ in 0..chunk_count {
-        // SAFETY: We pre-calculated that this iterator have at least this amount of elements or
-        // more
+        // SAFETY: We pre-calculated that this iterator have at least this amount of elements
         let n = unsafe {
             (iterator.next().unwrap_unchecked() as usize) << 16
                 | (iterator.next().unwrap_unchecked() as usize) << 8
