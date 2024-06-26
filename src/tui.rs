@@ -6,16 +6,15 @@
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
 // TODO: Introduce text formatting (bold, italic, colors, highlight, etc.), see: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
 // TODO: Add titles in the borders
-// TODO: Add better borders (continuous and with colors), use '─', '│', '┌', '┐', '└', '┘'
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
+// TODO: Get the actual terminal width and height, see: https://github.com/clap-rs/term_size-rs/blob/master/src/platform/unix.rs
 
 pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
 }
 
-// TODO: Get the actual terminal width and height
 pub struct Terminal {
-    buffer: Vec<u8>,
+    buffer: Vec<char>,
     width: usize,
     height: usize,
 }
@@ -23,16 +22,18 @@ pub struct Terminal {
 impl Terminal {
     pub fn new(width: usize, height: usize) -> Terminal {
         Terminal {
-            buffer: vec![b' '; width * height],
+            buffer: vec![' '; width * height],
             width,
             height,
         }
     }
 
     pub fn render(&self) {
-        for i in (0..self.buffer.len()).step_by(self.width) {
-            let line = std::str::from_utf8(&self.buffer[i..i + self.width]).unwrap();
-            println!("{line}");
+        for line in (0..self.buffer.len()).step_by(self.width) {
+            for i in line..line + self.width {
+                print!("{}", self.buffer[i])
+            }
+            println!()
         }
     }
 
@@ -68,34 +69,24 @@ impl Rectangle {
 
         let left_width = (self.width as f32 * percentage) as usize;
         let right_width = self.width - left_width;
-        // Horizontal split without gaps        Vertical split without gaps
-        //        +-----++-----+                      +------------+
-        //        |     ||     |                      |            |
-        //        |     ||     |                      +------------+
-        //        |     ||     |                      +------------+
-        //        |     ||     |                      |            |
-        //        +-----++-----+                      +------------+
-        //
-        // Since the columns are thinner than the rows, we compensate for that in the
-        // horizontal splitting by adding a gap between the two rectangles.
-        //        +-----+ +----+
-        //        |     | |    |
-        //        |     | |    |
-        //        |     | |    |
-        //        |     | |    |
-        //        +-----+ +----+
-        let gap = 1;
+        // Horizontal split                    Vertical split
+        // +-----++-----+                      +------------+
+        // |     ||     |                      |            |
+        // |     ||     |                      +------------+
+        // |     ||     |                      +------------+
+        // |     ||     |                      |            |
+        // +-----++-----+                      +------------+
 
         let left = Rectangle {
             x: self.x,
             y: self.y,
-            width: left_width - gap,
+            width: left_width,
             height: self.height,
         };
         let right = Rectangle {
-            x: self.x + left_width + gap,
+            x: self.x + left_width,
             y: self.y,
-            width: (right_width - gap),
+            width: right_width,
             height: self.height,
         };
 
@@ -159,14 +150,26 @@ impl Widget for Rectangle {
         // We iterate in this order to help with cache locality
         for y in self.y..self.y + self.height {
             for x in self.x..self.x + self.width {
-                if y == self.y || y == self.y + self.height - 1 {
-                    if x == self.x || x == self.x + self.width - 1 {
-                        terminal.buffer[y * terminal.width + x] = b'+';
+                let index = y * terminal.width + x;
+
+                if y == self.y {
+                    if x == self.x {
+                        terminal.buffer[index] = '┌';
+                    } else if x == self.x + self.width - 1 {
+                        terminal.buffer[index] = '┐';
                     } else {
-                        terminal.buffer[y * terminal.width + x] = b'-';
+                        terminal.buffer[index] = '─';
+                    }
+                } else if y == self.y + self.height - 1 {
+                    if x == self.x {
+                        terminal.buffer[index] = '└';
+                    } else if x == self.x + self.width - 1 {
+                        terminal.buffer[index] = '┘';
+                    } else {
+                        terminal.buffer[index] = '─';
                     }
                 } else if x == self.x || x == self.x + self.width - 1 {
-                    terminal.buffer[y * terminal.width + x] = b'|';
+                    terminal.buffer[index] = '│';
                 } else {
                     continue;
                 }
@@ -229,7 +232,7 @@ impl Widget for Text {
         };
 
         for (i, c) in self.text.chars().enumerate() {
-            terminal.buffer[y * terminal.width + x + i] = c as u8;
+            terminal.buffer[y * terminal.width + x + i] = c;
         }
     }
 }
@@ -293,7 +296,7 @@ impl Widget for ItemList {
 
         for (i, item) in self.items.iter().enumerate() {
             for (j, c) in item.chars().enumerate() {
-                terminal.buffer[(y + i) * terminal.width + x + j] = c as u8;
+                terminal.buffer[(y + i) * terminal.width + x + j] = c;
             }
         }
     }
@@ -314,11 +317,6 @@ impl Table {
         horizontal_alignment: HorizontalAlignment,
         area: Rectangle,
     ) -> Table {
-        let max_item_size = items
-            .iter()
-            .map(|row| row.iter().map(|item| item.len()).max().unwrap())
-            .max()
-            .unwrap();
         let max_row_size = items.iter().map(|row| row.len()).max().unwrap();
 
         let mut column_lengths = vec![0; max_row_size];
@@ -393,7 +391,7 @@ impl Widget for Table {
                         // Add spacing between table columns
                         + column_index
                         // Go to the character position                         
-                        + k] = c as u8;
+                        + k] = c;
                 }
             }
         }
