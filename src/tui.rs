@@ -6,8 +6,6 @@
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
 // TODO: Introduce text formatting (bold, italic, colors, highlight, etc.), see: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
-// TODO: Get the actual terminal width and height, see: https://github.com/clap-rs/term_size-rs/blob/master/src/platform/unix.rs
-
 pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
 }
@@ -19,7 +17,9 @@ pub struct Terminal {
 }
 
 impl Terminal {
-    pub fn new(width: usize, height: usize) -> Terminal {
+    pub fn new() -> Terminal {
+        let (width, height) = Terminal::size().unwrap();
+
         Terminal {
             buffer: vec![' '; width * height],
             width,
@@ -38,6 +38,27 @@ impl Terminal {
 
     pub fn area(&self) -> Rectangle {
         Rectangle::new(None, 0, 0, self.width, self.height)
+    }
+
+    fn size() -> std::io::Result<(usize, usize)> {
+        #[repr(C)]
+        struct TermSize {
+            row: libc::c_ushort,
+            col: libc::c_ushort,
+            x: libc::c_ushort,
+            y: libc::c_ushort,
+        }
+
+        unsafe {
+            let mut size: TermSize = std::mem::zeroed();
+            if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut size) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            // FIXME: We are removing '-1' here because we're adding an extra println! at the end,
+            // not showing the whole screen at once
+            Ok((size.col as usize, size.row as usize - 1))
+        }
     }
 }
 

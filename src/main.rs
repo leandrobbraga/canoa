@@ -18,16 +18,16 @@ fn main() {
     let sprints = jira.get_board_active_and_future_sprints(&board_id);
     let issues = jira.get_backlog_issues(&board_id);
 
-    let mut terminal = tui::Terminal::new(120, 60);
+    let mut terminal = tui::Terminal::new();
     let area = terminal.area();
-    let (left, mut right) = area.split_horizontally_at(0.3);
+    let (left, mut right) = area.split_horizontally_at(0.2);
     let (mut top, mut botton) = left.split_vertically();
 
     top.set_title("[ Sprints ]".into());
     let sprint_list = sprints.into_iter().map(|sprint| sprint.name).collect();
     let sprints_tui = top.item_list(
         sprint_list,
-        tui::VerticalAlignment::Center,
+        tui::VerticalAlignment::Top,
         tui::HorizontalAlignment::Center,
     );
 
@@ -42,10 +42,11 @@ fn main() {
     botton.set_title("[ Issues ]".into());
     let issues_tui = botton.table(
         issues_table,
-        tui::VerticalAlignment::Center,
+        tui::VerticalAlignment::Top,
         tui::HorizontalAlignment::Center,
     );
 
+    // TODO: Put an actual issue content here
     right.set_title(format!("[ {first_issue} ]"));
     let issue_details_tui = right.text(
         "This place will contain the selected issue details.".into(),
