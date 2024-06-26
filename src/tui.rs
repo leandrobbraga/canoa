@@ -5,7 +5,6 @@
 // TODO: Introduce the concept of scrooling, both vertical and horizontal
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
 // TODO: Introduce text formatting (bold, italic, colors, highlight, etc.), see: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
-// TODO: Add titles in the borders
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
 // TODO: Get the actual terminal width and height, see: https://github.com/clap-rs/term_size-rs/blob/master/src/platform/unix.rs
 
@@ -38,12 +37,13 @@ impl Terminal {
     }
 
     pub fn area(&self) -> Rectangle {
-        Rectangle::new(0, 0, self.width, self.height)
+        Rectangle::new(None, 0, 0, self.width, self.height)
     }
 }
 
 #[derive(Debug)]
 pub struct Rectangle {
+    title: Option<String>,
     x: usize,
     y: usize,
     width: usize,
@@ -51,13 +51,18 @@ pub struct Rectangle {
 }
 
 impl Rectangle {
-    fn new(x: usize, y: usize, width: usize, height: usize) -> Rectangle {
+    fn new(title: Option<String>, x: usize, y: usize, width: usize, height: usize) -> Rectangle {
         Rectangle {
+            title,
             x,
             y,
             width,
             height,
         }
+    }
+
+    pub fn set_title(&mut self, title: String) {
+        self.title = Some(title);
     }
 
     pub fn split_horizontally(self) -> (Rectangle, Rectangle) {
@@ -78,12 +83,14 @@ impl Rectangle {
         // +-----++-----+                      +------------+
 
         let left = Rectangle {
+            title: None,
             x: self.x,
             y: self.y,
             width: left_width,
             height: self.height,
         };
         let right = Rectangle {
+            title: None,
             x: self.x + left_width,
             y: self.y,
             width: right_width,
@@ -92,9 +99,11 @@ impl Rectangle {
 
         (left, right)
     }
+
     pub fn split_vertically(self) -> (Rectangle, Rectangle) {
         self.split_vertically_at(0.5)
     }
+
     pub fn split_vertically_at(self, percentage: f32) -> (Rectangle, Rectangle) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
@@ -102,12 +111,14 @@ impl Rectangle {
         let bottom_height = self.height - top_height;
 
         let top = Rectangle {
+            title: None,
             x: self.x,
             y: self.y,
             width: self.width,
             height: top_height,
         };
         let bottom = Rectangle {
+            title: None,
             x: self.x,
             y: self.y + top_height,
             width: self.width,
@@ -173,6 +184,13 @@ impl Widget for Rectangle {
                 } else {
                     continue;
                 }
+            }
+        }
+
+        // FIXME: Check for boundary
+        if let Some(title) = &self.title {
+            for (index, character) in title.chars().enumerate() {
+                terminal.buffer[self.y * terminal.width + self.x + 2 + index] = character
             }
         }
     }

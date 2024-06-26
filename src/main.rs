@@ -20,30 +20,33 @@ fn main() {
 
     let mut terminal = tui::Terminal::new(120, 60);
     let area = terminal.area();
-    let (left, right) = area.split_horizontally_at(0.3);
-    let (top, botton) = left.split_vertically();
+    let (left, mut right) = area.split_horizontally_at(0.3);
+    let (mut top, mut botton) = left.split_vertically();
 
-    let mut sprint_list = vec!["Sprints".into()];
-    sprint_list.extend(sprints.into_iter().map(|sprint| sprint.name));
+    top.set_title("[ Sprints ]".into());
+    let sprint_list = sprints.into_iter().map(|sprint| sprint.name).collect();
     let sprints_tui = top.item_list(
         sprint_list,
         tui::VerticalAlignment::Center,
         tui::HorizontalAlignment::Center,
     );
 
-    let mut issues_table = vec![vec!["Issue".into(), "Status".into()]];
-    issues_table.extend(
-        issues
-            .into_iter()
-            .take(10)
-            .map(|issue| vec![issue.name, issue.fields.status]),
-    );
+    let issues_table: Vec<Vec<String>> = issues
+        .into_iter()
+        .take(10)
+        .map(|issue| vec![issue.name, issue.fields.status])
+        .collect();
+
+    let first_issue = issues_table[0][0].clone();
+
+    botton.set_title("[ Issues ]".into());
     let issues_tui = botton.table(
         issues_table,
         tui::VerticalAlignment::Center,
         tui::HorizontalAlignment::Center,
     );
 
+    right.set_title(format!("[ {first_issue} ]"));
     let issue_details_tui = right.text(
         "This place will contain the selected issue details.".into(),
         tui::VerticalAlignment::Center,
