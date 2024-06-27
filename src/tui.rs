@@ -6,6 +6,7 @@
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
 // TODO: Introduce text formatting (bold, italic, colors, highlight, etc.), see: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
+// TODO: Add floating panel
 pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
     fn height(&self) -> usize;
