@@ -18,6 +18,8 @@ fn main() {
     let sprints = jira.get_board_active_and_future_sprints(&board_id);
     let issues = jira.get_backlog_issues(&board_id);
 
+    let first_issue = issues[0].clone();
+
     let mut terminal = tui::Terminal::new();
     let area = terminal.area();
     let (left, mut right) = area.split_horizontally_at(0.2);
@@ -33,11 +35,9 @@ fn main() {
 
     let issues_table: Vec<Vec<String>> = issues
         .into_iter()
-        .take(10)
+        .take(botton.height() - 2)
         .map(|issue| vec![issue.name, issue.fields.status])
         .collect();
-
-    let first_issue = issues_table[0][0].clone();
 
     botton.set_title("[ Issues ]".into());
     let issues_tui = botton.table(
@@ -47,11 +47,22 @@ fn main() {
     );
 
     // TODO: Put an actual issue content here
-    right.set_title(format!("[ {first_issue} ]"));
+    right.set_title(format!("[ {} ]", first_issue.name));
+    let description = first_issue
+        .fields
+        .description
+        .map(|description| {
+            description
+                .chars()
+                .filter(|c| *c != '\n')
+                .take(right.width() - 2)
+                .collect()
+        })
+        .unwrap_or("This place will contain the selected issue details.".into());
     let issue_details_tui = right.text(
-        "This place will contain the selected issue details.".into(),
+        description,
         tui::VerticalAlignment::Center,
-        tui::HorizontalAlignment::Center,
+        tui::HorizontalAlignment::Left,
     );
 
     sprints_tui.render(&mut terminal);
@@ -59,6 +70,4 @@ fn main() {
     issue_details_tui.render(&mut terminal);
 
     terminal.render();
-
-    std::thread::sleep(std::time::Duration::from_secs(10));
 }

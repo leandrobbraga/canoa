@@ -8,6 +8,10 @@
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
 pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
+    fn height(&self) -> usize;
+    fn width(&self) -> usize;
+
+    // TODO: Add methods for inner height and width for content rendering.
 }
 
 pub struct Terminal {
@@ -90,18 +94,18 @@ impl Rectangle {
         self.split_horizontally_at(0.5)
     }
 
+    /// Horizontal split
+    /// +-----++-----+
+    /// |     ||     |
+    /// |     ||     |
+    /// |     ||     |
+    /// |     ||     |
+    /// +-----++-----+
     pub fn split_horizontally_at(self, percentage: f32) -> (Rectangle, Rectangle) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
         let left_width = (self.width as f32 * percentage) as usize;
         let right_width = self.width - left_width;
-        // Horizontal split                    Vertical split
-        // +-----++-----+                      +------------+
-        // |     ||     |                      |            |
-        // |     ||     |                      +------------+
-        // |     ||     |                      +------------+
-        // |     ||     |                      |            |
-        // +-----++-----+                      +------------+
 
         let left = Rectangle {
             title: None,
@@ -125,6 +129,13 @@ impl Rectangle {
         self.split_vertically_at(0.5)
     }
 
+    /// Vertical split
+    /// +------------+
+    /// |            |
+    /// +------------+
+    /// +------------+
+    /// |            |
+    /// +------------+
     pub fn split_vertically_at(self, percentage: f32) -> (Rectangle, Rectangle) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
@@ -210,10 +221,18 @@ impl Widget for Rectangle {
 
         // FIXME: Check for boundary
         if let Some(title) = &self.title {
-            for (index, character) in title.chars().enumerate() {
-                terminal.buffer[self.y * terminal.width + self.x + 2 + index] = character
+            for (index, c) in title.chars().enumerate() {
+                terminal.buffer[self.y * terminal.width + self.x + 2 + index] = c
             }
         }
+    }
+
+    fn height(&self) -> usize {
+        self.height
+    }
+
+    fn width(&self) -> usize {
+        self.width
     }
 }
 
@@ -243,7 +262,7 @@ impl Text {
         horizontal_alignment: HorizontalAlignment,
         area: Rectangle,
     ) -> Text {
-        assert!(text.len() < area.width - 2); // -2 for the border
+        assert!(text.len() <= area.width - 2); // -2 for the border
         Text {
             text,
             vertical_alignment,
@@ -256,6 +275,7 @@ impl Widget for Text {
     fn render(&self, terminal: &mut Terminal) {
         self.area.render(terminal);
 
+        // FIXME: Deal with multiline text
         let y = match self.vertical_alignment {
             VerticalAlignment::Top => self.area.y + 1, // +1 for the border
             VerticalAlignment::Bottom => self.area.y + self.area.height - 1 - 1, // -1 for the border
@@ -267,12 +287,22 @@ impl Widget for Text {
             HorizontalAlignment::Right => {
                 self.area.x + self.area.width - self.text.len() - 1 // -1 for the border
             }
-            HorizontalAlignment::Center => self.area.x + self.area.width / 2 - self.text.len() / 2,
+            HorizontalAlignment::Center => self.area.x + (self.area.width - self.text.len()) / 2,
         };
 
+        // FIXME: Deal with newlines
+        // FIXME: Deal with hardbreaks
         for (i, c) in self.text.chars().enumerate() {
             terminal.buffer[y * terminal.width + x + i] = c;
         }
+    }
+
+    fn height(&self) -> usize {
+        self.area.height
+    }
+
+    fn width(&self) -> usize {
+        self.area.width
     }
 }
 
@@ -290,7 +320,7 @@ impl ItemList {
         horizontal_alignment: HorizontalAlignment,
         area: Rectangle,
     ) -> ItemList {
-        assert!(items.len() < area.height - 2); // -2 for the border
+        assert!(items.len() <= area.height - 2); // -2 for the border
         assert!(items.iter().map(|item| item.len()).max() < Some(area.width - 2)); // -2 for the border
 
         ItemList {
@@ -339,6 +369,14 @@ impl Widget for ItemList {
             }
         }
     }
+
+    fn height(&self) -> usize {
+        self.area.height
+    }
+
+    fn width(&self) -> usize {
+        self.area.width
+    }
 }
 
 pub struct Table {
@@ -369,7 +407,7 @@ impl Table {
 
         let required_width: usize = column_lengths.iter().sum();
 
-        assert!((items.len()) < area.height - 2); // -2 for the border
+        assert!((items.len()) <= area.height - 2); // -2 for the border
         assert!(required_width < area.width - 2); // -2 for the border
 
         Table {
@@ -434,5 +472,13 @@ impl Widget for Table {
                 }
             }
         }
+    }
+
+    fn height(&self) -> usize {
+        self.area.height
+    }
+
+    fn width(&self) -> usize {
+        self.area.width
     }
 }

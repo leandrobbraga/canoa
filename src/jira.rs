@@ -8,21 +8,21 @@ pub struct Jira {
     host: Box<str>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Sprint {
     pub id: u32,
     pub name: String,
     pub state: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Issue {
     #[serde(rename(deserialize = "key"))]
     pub name: String,
     pub fields: IssueFields,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct IssueFields {
     pub summary: String,
     #[serde(
@@ -34,6 +34,7 @@ pub struct IssueFields {
     pub assignee: Option<String>,
     #[serde(deserialize_with = "deserialize_status")]
     pub status: String,
+    pub description: Option<String>,
 }
 
 fn deserialize_type<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -96,7 +97,10 @@ impl Jira {
             self.host.as_ref()
         ))
         .set("Authorization", &self.authorization.as_ref())
-        .query("fields", "summary, status, labels, assignee, issuetype")
+        .query(
+            "fields",
+            "summary, status, labels, assignee, issuetype, description",
+        )
         .call()
         .unwrap()
         .into_json()
@@ -139,7 +143,10 @@ impl Jira {
             self.host.as_ref()
         ))
         .set("Authorization", &self.authorization.as_ref())
-        .query("fields", "summary, status, labels, assignee, issuetype")
+        .query(
+            "fields",
+            "summary, status, labels, assignee, issuetype, description",
+        )
         .call()
         .unwrap()
         .into_json()
