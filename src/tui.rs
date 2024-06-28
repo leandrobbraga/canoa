@@ -65,6 +65,14 @@ impl Terminal {
             Ok((size.col as usize, size.row as usize - 1))
         }
     }
+
+    #[inline(always)]
+    fn position_to_buffer_index(&self, x: usize, y: usize) -> usize {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+
+        y * self.width + x
+    }
 }
 
 #[derive(Debug)]
@@ -187,43 +195,51 @@ impl Rectangle {
     ) -> Table {
         Table::new(items, vertical_alignment, horizontal_alignment, self)
     }
+
+    #[inline(always)]
+    fn position_to_buffer_index(&self, terminal: &Terminal, x: usize, y: usize) -> usize {
+        debug_assert!(x <= self.width);
+        debug_assert!(y <= self.height);
+
+        terminal.position_to_buffer_index(self.x + x, self.y + y)
+    }
 }
 
 impl Widget for Rectangle {
     fn render(&self, terminal: &mut Terminal) {
         // We iterate in this order to help with cache locality
-        for y in self.y..self.y + self.height {
-            for x in self.x..self.x + self.width {
-                let index = y * terminal.width + x;
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let buffer_index = self.position_to_buffer_index(terminal, x, y);
 
-                if y == self.y {
-                    if x == self.x {
-                        terminal.buffer[index] = '┌';
-                    } else if x == self.x + self.width - 1 {
-                        terminal.buffer[index] = '┐';
+                if y == 0 {
+                    if x == 0 {
+                        terminal.buffer[buffer_index] = '┌';
+                    } else if x == self.width - 1 {
+                        terminal.buffer[buffer_index] = '┐';
                     } else {
-                        terminal.buffer[index] = '─';
+                        terminal.buffer[buffer_index] = '─';
                     }
-                } else if y == self.y + self.height - 1 {
-                    if x == self.x {
-                        terminal.buffer[index] = '└';
-                    } else if x == self.x + self.width - 1 {
-                        terminal.buffer[index] = '┘';
+                } else if y == self.height - 1 {
+                    if x == 0 {
+                        terminal.buffer[buffer_index] = '└';
+                    } else if x == self.width - 1 {
+                        terminal.buffer[buffer_index] = '┘';
                     } else {
-                        terminal.buffer[index] = '─';
+                        terminal.buffer[buffer_index] = '─';
                     }
-                } else if x == self.x || x == self.x + self.width - 1 {
-                    terminal.buffer[index] = '│';
+                } else if x == 0 || x == self.width - 1 {
+                    terminal.buffer[buffer_index] = '│';
                 } else {
                     continue;
                 }
             }
         }
 
-        // FIXME: Check for boundary
         if let Some(title) = &self.title {
-            for (index, c) in title.chars().enumerate() {
-                terminal.buffer[self.y * terminal.width + self.x + 2 + index] = c
+            for (x, c) in title.chars().enumerate() {
+                let buffer_index = self.position_to_buffer_index(terminal, x + 2, 0);
+                terminal.buffer[buffer_index] = c
             }
         }
     }
@@ -264,6 +280,7 @@ impl Text {
         area: Rectangle,
     ) -> Text {
         assert!(text.len() <= area.width - 2); // -2 for the border
+
         Text {
             text,
             vertical_alignment,
@@ -278,23 +295,24 @@ impl Widget for Text {
 
         // FIXME: Deal with multiline text
         let y = match self.vertical_alignment {
-            VerticalAlignment::Top => self.area.y + 1, // +1 for the border
-            VerticalAlignment::Bottom => self.area.y + self.area.height - 1 - 1, // -1 for the border
-            VerticalAlignment::Center => self.area.y + self.area.height / 2,
+            VerticalAlignment::Top => 1, // 1 for the border
+            VerticalAlignment::Bottom => self.area.height - 1 - 1, // -1 for the border
+            VerticalAlignment::Center => self.area.height / 2,
         };
 
         let x = match self.horizontal_alignment {
-            HorizontalAlignment::Left => self.area.x + 1, // +1 for the border
+            HorizontalAlignment::Left => 1, // 1 for the border
             HorizontalAlignment::Right => {
-                self.area.x + self.area.width - self.text.len() - 1 // -1 for the border
+                self.area.width - self.text.len() - 1 // -1 for the border
             }
-            HorizontalAlignment::Center => self.area.x + (self.area.width - self.text.len()) / 2,
+            HorizontalAlignment::Center => (self.area.width - self.text.len()) / 2,
         };
 
         // FIXME: Deal with newlines
         // FIXME: Deal with hardbreaks
         for (i, c) in self.text.chars().enumerate() {
-            terminal.buffer[y * terminal.width + x + i] = c;
+            let buffer_index = self.area.position_to_buffer_index(terminal, x + i, y);
+            terminal.buffer[buffer_index] = c;
         }
     }
 
@@ -342,31 +360,29 @@ impl Widget for ItemList {
             return;
         }
 
-        let y = match self.vertical_alignment {
-            VerticalAlignment::Top => self.area.y + 1, // +1 for the border
-            VerticalAlignment::Bottom => {
-                // -1 for the border
-                self.area.y + self.area.height - self.items.len() - 1
-            }
-            VerticalAlignment::Center => self.area.y + self.area.height / 2 - self.items.len() / 2,
+        let y_offset = match self.vertical_alignment {
+            VerticalAlignment::Top => 1, // 1 for the border
+            VerticalAlignment::Bottom => self.area.height - self.items.len() - 1, // -1 for the border
+            VerticalAlignment::Center => (self.area.height - self.items.len()) / 2,
         };
 
-        let x = match self.horizontal_alignment {
-            HorizontalAlignment::Left => self.area.x + 1, // +1 for the border
+        let x_offset = match self.horizontal_alignment {
+            HorizontalAlignment::Left => 1, // 1 for the border
             HorizontalAlignment::Right => {
-                self.area.x + self.area.width
-                    - self.items.iter().map(|item| item.len()).max().unwrap_or(0)
-                    - 1 // -1 for the border
+                self.area.width - self.items.iter().map(|item| item.len()).max().unwrap_or(0) - 1
+                // -1 for the border
             }
             HorizontalAlignment::Center => {
-                self.area.x + self.area.width / 2
-                    - self.items.iter().map(|item| item.len()).max().unwrap_or(0) / 2
+                (self.area.width - self.items.iter().map(|item| item.len()).max().unwrap_or(0)) / 2
             }
         };
 
-        for (i, item) in self.items.iter().enumerate() {
-            for (j, c) in item.chars().enumerate() {
-                terminal.buffer[(y + i) * terminal.width + x + j] = c;
+        for (y, item) in self.items.iter().enumerate() {
+            for (x, c) in item.chars().enumerate() {
+                let buffer_index =
+                    self.area
+                        .position_to_buffer_index(terminal, x_offset + x, y_offset + y);
+                terminal.buffer[buffer_index] = c;
             }
         }
     }
@@ -430,46 +446,45 @@ impl Widget for Table {
             return;
         }
 
-        let y = match self.vertical_alignment {
-            VerticalAlignment::Top => self.area.y + 1, // +1 for the border
-            VerticalAlignment::Bottom => {
-                // -1 for the border
-                self.area.y + self.area.height - self.items.len() - 1
-            }
-            VerticalAlignment::Center => self.area.y + self.area.height / 2 - self.items.len() / 2,
+        let y_offset = match self.vertical_alignment {
+            VerticalAlignment::Top => 1, // 1 for the border
+            VerticalAlignment::Bottom => self.area.height - self.items.len() - 1, // -1 for the border
+            VerticalAlignment::Center => (self.area.height - self.items.len()) / 2,
         };
 
-        let x = match self.horizontal_alignment {
-            HorizontalAlignment::Left => self.area.x + 1, // +1 for the border
+        let x_offset = match self.horizontal_alignment {
+            HorizontalAlignment::Left => 1, // 1 for the border
             HorizontalAlignment::Right => {
                 // -1 for the border
-                self.area.x + self.area.width
+                self.area.width
                     - self.column_lengths.iter().sum::<usize>()
                     - 1
                     // For the spacing between columns
                     - self.column_lengths.len() - 1
             }
             HorizontalAlignment::Center => {
-                self.area.x + self.area.width / 2
-                    - self.column_lengths.iter().sum::<usize>() / 2
+                (self.area.width
+                    - self.column_lengths.iter().sum::<usize>()
                     // For the spacing between columns
-                    - (self.column_lengths.len() - 1)/2
+                    - self.column_lengths.len()
+                    - 1)
+                    / 2
             }
         };
 
-        for (row_index, row) in self.items.iter().enumerate() {
+        for (y, row) in self.items.iter().enumerate() {
             for (column_index, item) in row.iter().enumerate() {
                 for (k, c) in item.chars().enumerate() {
-                    // Go to the correct line in the buffer
-                    terminal.buffer[(y + row_index) * terminal.width
-                        // Go to the start of the table
-                        + x
-                        // Go to the start of the table column 
-                        + (self.column_lengths.iter().take(column_index).sum::<usize>())
-                        // Add spacing between table columns
-                        + column_index
-                        // Go to the character position                         
-                        + k] = c;
+                    // We sum the 'column_index' in the end to add gaps
+                    let x =
+                        self.column_lengths.iter().take(column_index).sum::<usize>() + column_index;
+
+                    let buffer_index = self.area.position_to_buffer_index(
+                        terminal,
+                        x_offset + x + k,
+                        y_offset + y,
+                    );
+                    terminal.buffer[buffer_index] = c;
                 }
             }
         }
