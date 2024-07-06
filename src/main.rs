@@ -40,11 +40,13 @@ fn main() {
         .collect();
 
     botton.set_title(Some("[ Issues ]".into()));
-    let issues_tui = botton.table(
+    let mut issues_tui = botton.table(
         issues_table,
         tui::VerticalAlignment::Top,
         tui::HorizontalAlignment::Center,
     );
+    issues_tui.set_border_color(Color::Green);
+    issues_tui.set_selected(Some(0));
 
     // TODO: Put an actual issue content here
     right.set_title(Some(format!("[ {} ]", first_issue.name)));
@@ -52,13 +54,11 @@ fn main() {
         .fields
         .description
         .unwrap_or("This place will contain the selected issue details.".into());
-    let mut issue_details_tui = right.text(
+    let issue_details_tui = right.text(
         description,
         tui::VerticalAlignment::Center,
         tui::HorizontalAlignment::Left,
     );
-
-    issue_details_tui.set_border_color(Color::Green);
 
     sprints_tui.render(&mut terminal);
     issues_tui.render(&mut terminal);

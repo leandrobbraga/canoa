@@ -22,7 +22,8 @@ pub trait Widget {
 #[derive(Copy, Clone)]
 struct Cell {
     character: char,
-    color: Color,
+    foreground_color: Color,
+    background_color: Color,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -30,13 +31,26 @@ pub enum Color {
     // User's terminal default color
     Default,
     Green,
+    Cyan,
+    Black,
 }
 
 impl Color {
-    fn apply(&self) {
+    fn apply_foreground(&self) {
         match self {
             Color::Green => print!("\x1b[32m"),
+            Color::Cyan => print!("\x1b[36m"),
             Color::Default => print!("\x1b[39m"),
+            Color::Black => print!("\x1b[30m"),
+        }
+    }
+
+    fn apply_background(&self) {
+        match self {
+            Color::Green => print!("\x1b[42m"),
+            Color::Cyan => print!("\x1b[46m"),
+            Color::Default => print!("\x1b[49m"),
+            Color::Black => print!("\x1b[40m"),
         }
     }
 }
@@ -62,7 +76,8 @@ impl Terminal {
             buffer: vec![
                 Cell {
                     character: ' ',
-                    color: Color::Default
+                    foreground_color: Color::Default,
+                    background_color: Color::Default
                 };
                 width * height
             ],
@@ -75,8 +90,10 @@ impl Terminal {
         Terminal::clear_screen();
 
         // We always start with the Default color to ensure consistency
-        let mut current_color = Color::Default;
-        current_color.apply();
+        let mut current_foreground_color = Color::Default;
+        let mut current_background_color = Color::Default;
+        current_foreground_color.apply_foreground();
+        current_background_color.apply_background();
 
         for line in (0..self.buffer.len()).step_by(self.width) {
             print!("\n");
@@ -84,9 +101,14 @@ impl Terminal {
             for i in line..line + self.width {
                 let cell = self.buffer[i];
 
-                if cell.color != current_color {
-                    current_color = cell.color;
-                    current_color.apply();
+                if cell.foreground_color != current_foreground_color {
+                    current_foreground_color = cell.foreground_color;
+                    current_foreground_color.apply_foreground();
+                }
+
+                if cell.background_color != current_background_color {
+                    current_background_color = cell.background_color;
+                    current_background_color.apply_background();
                 }
 
                 print!("{}", cell.character)
@@ -283,28 +305,28 @@ impl Widget for Rectangle {
                 if y == 0 {
                     if x == 0 {
                         terminal.buffer[buffer_index].character = '┌';
-                        terminal.buffer[buffer_index].color = self.border_color;
+                        terminal.buffer[buffer_index].foreground_color = self.border_color;
                     } else if x == self.width - 1 {
                         terminal.buffer[buffer_index].character = '┐';
-                        terminal.buffer[buffer_index].color = self.border_color;
+                        terminal.buffer[buffer_index].foreground_color = self.border_color;
                     } else {
                         terminal.buffer[buffer_index].character = '─';
-                        terminal.buffer[buffer_index].color = self.border_color;
+                        terminal.buffer[buffer_index].foreground_color = self.border_color;
                     }
                 } else if y == self.height - 1 {
                     if x == 0 {
                         terminal.buffer[buffer_index].character = '└';
-                        terminal.buffer[buffer_index].color = self.border_color;
+                        terminal.buffer[buffer_index].foreground_color = self.border_color;
                     } else if x == self.width - 1 {
                         terminal.buffer[buffer_index].character = '┘';
-                        terminal.buffer[buffer_index].color = self.border_color;
+                        terminal.buffer[buffer_index].foreground_color = self.border_color;
                     } else {
                         terminal.buffer[buffer_index].character = '─';
-                        terminal.buffer[buffer_index].color = self.border_color;
+                        terminal.buffer[buffer_index].foreground_color = self.border_color;
                     }
                 } else if x == 0 || x == self.width - 1 {
                     terminal.buffer[buffer_index].character = '│';
-                    terminal.buffer[buffer_index].color = self.border_color;
+                    terminal.buffer[buffer_index].foreground_color = self.border_color;
                 } else {
                     continue;
                 }
@@ -431,6 +453,7 @@ pub struct ItemList {
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
     area: Rectangle,
+    selected_row: Option<usize>,
 }
 
 impl ItemList {
@@ -448,7 +471,12 @@ impl ItemList {
             vertical_alignment,
             horizontal_alignment,
             area,
+            selected_row: None,
         }
+    }
+
+    pub fn set_selected(&mut self, item_index: Option<usize>) {
+        self.selected_row = item_index
     }
 }
 
@@ -477,6 +505,17 @@ impl Widget for ItemList {
                 (self.area.width - self.items.iter().map(|item| item.len()).max().unwrap_or(0)) / 2
             }
         };
+
+        if let Some(selected_row) = self.selected_row {
+            for i in 1..self.width() - 1 {
+                let buffer_index =
+                    self.area
+                        .position_to_buffer_index(terminal, i, y_offset + selected_row);
+
+                terminal.buffer[buffer_index].background_color = Color::Cyan;
+                terminal.buffer[buffer_index].foreground_color = Color::Black;
+            }
+        }
 
         for (y, item) in self.items.iter().enumerate() {
             for (x, c) in item.chars().enumerate() {
@@ -511,6 +550,7 @@ pub struct Table {
     horizontal_alignment: HorizontalAlignment,
     area: Rectangle,
     column_lengths: Vec<usize>,
+    selected_row: Option<usize>,
 }
 
 impl Table {
@@ -542,7 +582,12 @@ impl Table {
             horizontal_alignment,
             area,
             column_lengths,
+            selected_row: None,
         }
+    }
+
+    pub fn set_selected(&mut self, row_index: Option<usize>) {
+        self.selected_row = row_index
     }
 }
 
@@ -581,7 +626,18 @@ impl Widget for Table {
             }
         };
 
-        for (y, row) in self.items.iter().enumerate() {
+        if let Some(selected_row) = self.selected_row {
+            for i in 1..self.width() - 1 {
+                let buffer_index =
+                    self.area
+                        .position_to_buffer_index(terminal, i, y_offset + selected_row);
+
+                terminal.buffer[buffer_index].background_color = Color::Cyan;
+                terminal.buffer[buffer_index].foreground_color = Color::Black;
+            }
+        }
+
+        for (row_index, row) in self.items.iter().enumerate() {
             for (column_index, item) in row.iter().enumerate() {
                 for (k, c) in item.chars().enumerate() {
                     // We sum the 'column_index' in the end to add gaps
@@ -591,7 +647,7 @@ impl Widget for Table {
                     let buffer_index = self.area.position_to_buffer_index(
                         terminal,
                         x_offset + x + k,
-                        y_offset + y,
+                        y_offset + row_index,
                     );
                     terminal.buffer[buffer_index].character = c;
                 }
