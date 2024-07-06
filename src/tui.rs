@@ -10,6 +10,7 @@ pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
     fn height(&self) -> usize;
     fn width(&self) -> usize;
+    fn set_border_color(&mut self, color: Color);
 
     // TODO: Add methods for inner height and width for content rendering.
 }
@@ -17,21 +18,21 @@ pub trait Widget {
 #[derive(Copy, Clone)]
 struct Cell {
     character: char,
-    color: CellColor,
+    color: Color,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
-enum CellColor {
+pub enum Color {
     // User's terminal default color
     Default,
     Green,
 }
 
-impl CellColor {
+impl Color {
     fn apply(&self) {
         match self {
-            CellColor::Green => print!("\x1b[32m"),
-            CellColor::Default => print!("\x1b[39m"),
+            Color::Green => print!("\x1b[32m"),
+            Color::Default => print!("\x1b[39m"),
         }
     }
 }
@@ -50,7 +51,7 @@ impl Terminal {
             buffer: vec![
                 Cell {
                     character: ' ',
-                    color: CellColor::Default
+                    color: Color::Default
                 };
                 width * height
             ],
@@ -61,7 +62,7 @@ impl Terminal {
 
     pub fn flush(&self) {
         // We always start with the Default color to ensure consistency
-        let mut current_color = CellColor::Default;
+        let mut current_color = Color::Default;
         current_color.apply();
 
         for line in (0..self.buffer.len()).step_by(self.width) {
@@ -113,13 +114,13 @@ impl Terminal {
     }
 }
 
-#[derive(Debug)]
 pub struct Rectangle {
     title: Option<String>,
     x: usize,
     y: usize,
     width: usize,
     height: usize,
+    border_color: Color,
 }
 
 impl Rectangle {
@@ -130,6 +131,7 @@ impl Rectangle {
             y,
             width,
             height,
+            border_color: Color::Default,
         }
     }
 
@@ -160,6 +162,7 @@ impl Rectangle {
             y: self.y,
             width: left_width,
             height: self.height,
+            border_color: self.border_color,
         };
         let right = Rectangle {
             title: None,
@@ -167,6 +170,7 @@ impl Rectangle {
             y: self.y,
             width: right_width,
             height: self.height,
+            border_color: self.border_color,
         };
 
         (left, right)
@@ -195,6 +199,7 @@ impl Rectangle {
             y: self.y,
             width: self.width,
             height: top_height,
+            border_color: self.border_color,
         };
         let bottom = Rectangle {
             title: None,
@@ -202,6 +207,7 @@ impl Rectangle {
             y: self.y + top_height,
             width: self.width,
             height: bottom_height,
+            border_color: self.border_color,
         };
 
         (top, bottom)
@@ -253,28 +259,28 @@ impl Widget for Rectangle {
                 if y == 0 {
                     if x == 0 {
                         terminal.buffer[buffer_index].character = '┌';
-                        terminal.buffer[buffer_index].color = CellColor::Green;
+                        terminal.buffer[buffer_index].color = self.border_color;
                     } else if x == self.width - 1 {
                         terminal.buffer[buffer_index].character = '┐';
-                        terminal.buffer[buffer_index].color = CellColor::Green;
+                        terminal.buffer[buffer_index].color = self.border_color;
                     } else {
                         terminal.buffer[buffer_index].character = '─';
-                        terminal.buffer[buffer_index].color = CellColor::Green;
+                        terminal.buffer[buffer_index].color = self.border_color;
                     }
                 } else if y == self.height - 1 {
                     if x == 0 {
                         terminal.buffer[buffer_index].character = '└';
-                        terminal.buffer[buffer_index].color = CellColor::Green;
+                        terminal.buffer[buffer_index].color = self.border_color;
                     } else if x == self.width - 1 {
                         terminal.buffer[buffer_index].character = '┘';
-                        terminal.buffer[buffer_index].color = CellColor::Green;
+                        terminal.buffer[buffer_index].color = self.border_color;
                     } else {
                         terminal.buffer[buffer_index].character = '─';
-                        terminal.buffer[buffer_index].color = CellColor::Green;
+                        terminal.buffer[buffer_index].color = self.border_color;
                     }
                 } else if x == 0 || x == self.width - 1 {
                     terminal.buffer[buffer_index].character = '│';
-                    terminal.buffer[buffer_index].color = CellColor::Green;
+                    terminal.buffer[buffer_index].color = self.border_color;
                 } else {
                     continue;
                 }
@@ -295,6 +301,10 @@ impl Widget for Rectangle {
 
     fn width(&self) -> usize {
         self.width
+    }
+
+    fn set_border_color(&mut self, color: Color) {
+        self.border_color = color
     }
 }
 
@@ -378,6 +388,10 @@ impl Widget for Text {
     fn width(&self) -> usize {
         self.area.width
     }
+
+    fn set_border_color(&mut self, color: Color) {
+        self.area.set_border_color(color)
+    }
 }
 
 pub struct ItemList {
@@ -448,6 +462,10 @@ impl Widget for ItemList {
 
     fn width(&self) -> usize {
         self.area.width
+    }
+
+    fn set_border_color(&mut self, color: Color) {
+        self.area.set_border_color(color)
     }
 }
 
@@ -551,5 +569,9 @@ impl Widget for Table {
 
     fn width(&self) -> usize {
         self.area.width
+    }
+
+    fn set_border_color(&mut self, color: Color) {
+        self.area.set_border_color(color)
     }
 }

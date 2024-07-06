@@ -3,7 +3,7 @@ mod jira;
 mod tui;
 
 use config::Config;
-use tui::Widget;
+use tui::{Color, Widget};
 
 fn main() {
     let Config {
@@ -52,11 +52,13 @@ fn main() {
         .fields
         .description
         .unwrap_or("This place will contain the selected issue details.".into());
-    let issue_details_tui = right.text(
+    let mut issue_details_tui = right.text(
         description,
         tui::VerticalAlignment::Center,
         tui::HorizontalAlignment::Left,
     );
+
+    issue_details_tui.set_border_color(Color::Green);
 
     sprints_tui.render(&mut terminal);
     issues_tui.render(&mut terminal);
