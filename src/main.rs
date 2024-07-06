@@ -48,7 +48,6 @@ fn main() {
     issues_tui.set_border_color(Color::Green);
     issues_tui.set_selected(Some(0));
 
-    // TODO: Put an actual issue content here
     right.set_title(Some(format!("[ {} ]", first_issue.name)));
     let description = first_issue
         .fields
