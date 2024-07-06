@@ -25,7 +25,7 @@ fn main() {
     let (left, mut right) = area.split_horizontally_at(0.2);
     let (mut top, mut botton) = left.split_vertically();
 
-    top.set_title("[ Sprints ]".into());
+    top.set_title(Some("[ Sprints ]".into()));
     let sprint_list = sprints.into_iter().map(|sprint| sprint.name).collect();
     let sprints_tui = top.item_list(
         sprint_list,
@@ -39,7 +39,7 @@ fn main() {
         .map(|issue| vec![issue.name, issue.fields.status])
         .collect();
 
-    botton.set_title("[ Issues ]".into());
+    botton.set_title(Some("[ Issues ]".into()));
     let issues_tui = botton.table(
         issues_table,
         tui::VerticalAlignment::Top,
@@ -47,7 +47,7 @@ fn main() {
     );
 
     // TODO: Put an actual issue content here
-    right.set_title(format!("[ {} ]", first_issue.name));
+    right.set_title(Some(format!("[ {} ]", first_issue.name)));
     let description = first_issue
         .fields
         .description
@@ -65,4 +65,6 @@ fn main() {
     issue_details_tui.render(&mut terminal);
 
     terminal.flush();
+
+    std::thread::sleep(std::time::Duration::from_secs(10));
 }

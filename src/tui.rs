@@ -2,6 +2,8 @@
 //! It's inspired in the tiling window manager system, where the user always have the whole screen
 //! covered and it just splits it between different widgets.
 
+use std::io::{stdout, Write};
+
 // TODO: Introduce the concept of scrooling, both vertical and horizontal
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
@@ -45,8 +47,15 @@ pub struct Terminal {
     height: usize,
 }
 
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        Terminal::make_cursor_visible();
+    }
+}
+
 impl Terminal {
     pub fn new() -> Terminal {
+        Terminal::make_cursor_invisible();
         let (width, height) = Terminal::size().unwrap();
 
         Terminal {
@@ -63,11 +72,15 @@ impl Terminal {
     }
 
     pub fn flush(&self) {
+        Terminal::clear_screen();
+
         // We always start with the Default color to ensure consistency
         let mut current_color = Color::Default;
         current_color.apply();
 
         for line in (0..self.buffer.len()).step_by(self.width) {
+            print!("\n");
+
             for i in line..line + self.width {
                 let cell = self.buffer[i];
 
@@ -78,8 +91,9 @@ impl Terminal {
 
                 print!("{}", cell.character)
             }
-            println!()
         }
+
+        stdout().flush().unwrap()
     }
 
     pub fn area(&self) -> Rectangle {
@@ -103,7 +117,7 @@ impl Terminal {
 
             // FIXME: We are removing '-1' here because we're adding an extra println! at the end,
             // not showing the whole screen at once
-            Ok((size.col as usize, size.row as usize - 1))
+            Ok((size.col as usize, size.row as usize))
         }
     }
 
@@ -113,6 +127,18 @@ impl Terminal {
         debug_assert!(y <= self.height);
 
         y * self.width + x
+    }
+
+    fn clear_screen() {
+        print!("\x1b[2J");
+    }
+
+    fn make_cursor_invisible() {
+        print!("\x1b[?25l");
+    }
+
+    fn make_cursor_visible() {
+        print!("\x1b[?25h");
     }
 }
 
