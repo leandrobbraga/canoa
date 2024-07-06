@@ -51,13 +51,6 @@ fn main() {
     let description = first_issue
         .fields
         .description
-        .map(|description| {
-            description
-                .chars()
-                .filter(|c| *c != '\n')
-                .take(right.width() - 2)
-                .collect()
-        })
         .unwrap_or("This place will contain the selected issue details.".into());
     let issue_details_tui = right.text(
         description,

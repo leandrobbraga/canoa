@@ -258,6 +258,7 @@ pub struct Text {
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
     area: Rectangle,
+    lines_count: usize,
 }
 
 pub enum HorizontalAlignment {
@@ -279,13 +280,17 @@ impl Text {
         horizontal_alignment: HorizontalAlignment,
         area: Rectangle,
     ) -> Text {
-        assert!(text.len() <= area.width - 2); // -2 for the border
+        // FIXME: Deal with hardwrap
+        let lines_count = text.chars().filter(|c| *c == '\n').count();
+
+        assert!(lines_count < area.height - 2);
 
         Text {
             text,
             vertical_alignment,
             horizontal_alignment,
             area,
+            lines_count,
         }
     }
 }
@@ -293,26 +298,31 @@ impl Widget for Text {
     fn render(&self, terminal: &mut Terminal) {
         self.area.render(terminal);
 
-        // FIXME: Deal with multiline text
         let y = match self.vertical_alignment {
             VerticalAlignment::Top => 1, // 1 for the border
-            VerticalAlignment::Bottom => self.area.height - 1 - 1, // -1 for the border
-            VerticalAlignment::Center => self.area.height / 2,
+            VerticalAlignment::Bottom => self.height() - 1 - 1 - self.lines_count, // -1 for the border
+            VerticalAlignment::Center => (self.height() - self.lines_count) / 2,
         };
 
-        let x = match self.horizontal_alignment {
-            HorizontalAlignment::Left => 1, // 1 for the border
-            HorizontalAlignment::Right => {
-                self.area.width - self.text.len() - 1 // -1 for the border
+        for (line_index, line) in self.text.lines().enumerate() {
+            let line_lenght = line.len();
+
+            let x = match self.horizontal_alignment {
+                HorizontalAlignment::Left => 1, // 1 for the border
+                HorizontalAlignment::Right => {
+                    self.width() - line_lenght - 1 // -1 for the border
+                }
+                HorizontalAlignment::Center => (self.width() - line_lenght) / 2,
+            };
+
+            // FIXME: Deal with hardwrap
+            for (row_index, c) in line.chars().enumerate() {
+                let buffer_index =
+                    self.area
+                        .position_to_buffer_index(terminal, x + row_index, y + line_index);
+
+                terminal.buffer[buffer_index] = c;
             }
-            HorizontalAlignment::Center => (self.area.width - self.text.len()) / 2,
-        };
-
-        // FIXME: Deal with newlines
-        // FIXME: Deal with hardbreaks
-        for (i, c) in self.text.chars().enumerate() {
-            let buffer_index = self.area.position_to_buffer_index(terminal, x + i, y);
-            terminal.buffer[buffer_index] = c;
         }
     }
 

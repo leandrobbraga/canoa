@@ -85,7 +85,6 @@ impl Jira {
         }
     }
 
-    #[must_use]
     pub fn get_sprint_issues(&self, board_id: &str, sprint_id: &str) -> Vec<Issue> {
         #[derive(Deserialize)]
         struct Response {
@@ -109,7 +108,6 @@ impl Jira {
         response.issues
     }
 
-    #[must_use]
     pub fn get_board_active_and_future_sprints(&self, board_id: &str) -> Vec<Sprint> {
         #[derive(Deserialize)]
         struct Response {
@@ -131,7 +129,6 @@ impl Jira {
         response.sprints
     }
 
-    #[must_use]
     pub fn get_backlog_issues(&self, board_id: &str) -> Vec<Issue> {
         #[derive(Deserialize)]
         struct Response {
