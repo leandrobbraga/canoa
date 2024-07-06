@@ -10,7 +10,9 @@ pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
     fn height(&self) -> usize;
     fn width(&self) -> usize;
+
     fn set_border_color(&mut self, color: Color);
+    fn set_title(&mut self, title: Option<String>);
 
     // TODO: Add methods for inner height and width for content rendering.
 }
@@ -133,10 +135,6 @@ impl Rectangle {
             height,
             border_color: Color::Default,
         }
-    }
-
-    pub fn set_title(&mut self, title: String) {
-        self.title = Some(title);
     }
 
     pub fn split_horizontally(self) -> (Rectangle, Rectangle) {
@@ -306,6 +304,10 @@ impl Widget for Rectangle {
     fn set_border_color(&mut self, color: Color) {
         self.border_color = color
     }
+
+    fn set_title(&mut self, title: Option<String>) {
+        self.title = title;
+    }
 }
 
 pub struct Text {
@@ -392,6 +394,10 @@ impl Widget for Text {
     fn set_border_color(&mut self, color: Color) {
         self.area.set_border_color(color)
     }
+
+    fn set_title(&mut self, title: Option<String>) {
+        self.area.set_title(title);
+    }
 }
 
 pub struct ItemList {
@@ -466,6 +472,10 @@ impl Widget for ItemList {
 
     fn set_border_color(&mut self, color: Color) {
         self.area.set_border_color(color)
+    }
+
+    fn set_title(&mut self, title: Option<String>) {
+        self.area.set_title(title);
     }
 }
 
@@ -573,5 +583,9 @@ impl Widget for Table {
 
     fn set_border_color(&mut self, color: Color) {
         self.area.set_border_color(color)
+    }
+
+    fn set_title(&mut self, title: Option<String>) {
+        self.area.set_title(title);
     }
 }
