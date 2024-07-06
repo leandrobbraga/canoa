@@ -62,5 +62,5 @@ fn main() {
     issues_tui.render(&mut terminal);
     issue_details_tui.render(&mut terminal);
 
-    terminal.render();
+    terminal.flush();
 }

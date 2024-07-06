@@ -4,7 +4,6 @@
 
 // TODO: Introduce the concept of scrooling, both vertical and horizontal
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
-// TODO: Introduce text formatting (bold, italic, colors, highlight, etc.), see: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
 // TODO: Add floating panel
 pub trait Widget {
@@ -15,8 +14,30 @@ pub trait Widget {
     // TODO: Add methods for inner height and width for content rendering.
 }
 
+#[derive(Copy, Clone)]
+struct Cell {
+    character: char,
+    color: CellColor,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum CellColor {
+    // User's terminal default color
+    Default,
+    Green,
+}
+
+impl CellColor {
+    fn apply(&self) {
+        match self {
+            CellColor::Green => print!("\x1b[32m"),
+            CellColor::Default => print!("\x1b[39m"),
+        }
+    }
+}
+
 pub struct Terminal {
-    buffer: Vec<char>,
+    buffer: Vec<Cell>,
     width: usize,
     height: usize,
 }
@@ -26,16 +47,33 @@ impl Terminal {
         let (width, height) = Terminal::size().unwrap();
 
         Terminal {
-            buffer: vec![' '; width * height],
+            buffer: vec![
+                Cell {
+                    character: ' ',
+                    color: CellColor::Default
+                };
+                width * height
+            ],
             width,
             height,
         }
     }
 
-    pub fn render(&self) {
+    pub fn flush(&self) {
+        // We always start with the Default color to ensure consistency
+        let mut current_color = CellColor::Default;
+        current_color.apply();
+
         for line in (0..self.buffer.len()).step_by(self.width) {
             for i in line..line + self.width {
-                print!("{}", self.buffer[i])
+                let cell = self.buffer[i];
+
+                if cell.color != current_color {
+                    current_color = cell.color;
+                    current_color.apply();
+                }
+
+                print!("{}", cell.character)
             }
             println!()
         }
@@ -214,22 +252,29 @@ impl Widget for Rectangle {
 
                 if y == 0 {
                     if x == 0 {
-                        terminal.buffer[buffer_index] = '┌';
+                        terminal.buffer[buffer_index].character = '┌';
+                        terminal.buffer[buffer_index].color = CellColor::Green;
                     } else if x == self.width - 1 {
-                        terminal.buffer[buffer_index] = '┐';
+                        terminal.buffer[buffer_index].character = '┐';
+                        terminal.buffer[buffer_index].color = CellColor::Green;
                     } else {
-                        terminal.buffer[buffer_index] = '─';
+                        terminal.buffer[buffer_index].character = '─';
+                        terminal.buffer[buffer_index].color = CellColor::Green;
                     }
                 } else if y == self.height - 1 {
                     if x == 0 {
-                        terminal.buffer[buffer_index] = '└';
+                        terminal.buffer[buffer_index].character = '└';
+                        terminal.buffer[buffer_index].color = CellColor::Green;
                     } else if x == self.width - 1 {
-                        terminal.buffer[buffer_index] = '┘';
+                        terminal.buffer[buffer_index].character = '┘';
+                        terminal.buffer[buffer_index].color = CellColor::Green;
                     } else {
-                        terminal.buffer[buffer_index] = '─';
+                        terminal.buffer[buffer_index].character = '─';
+                        terminal.buffer[buffer_index].color = CellColor::Green;
                     }
                 } else if x == 0 || x == self.width - 1 {
-                    terminal.buffer[buffer_index] = '│';
+                    terminal.buffer[buffer_index].character = '│';
+                    terminal.buffer[buffer_index].color = CellColor::Green;
                 } else {
                     continue;
                 }
@@ -239,7 +284,7 @@ impl Widget for Rectangle {
         if let Some(title) = &self.title {
             for (x, c) in title.chars().enumerate() {
                 let buffer_index = self.position_to_buffer_index(terminal, x + 2, 0);
-                terminal.buffer[buffer_index] = c
+                terminal.buffer[buffer_index].character = c
             }
         }
     }
@@ -321,7 +366,7 @@ impl Widget for Text {
                     self.area
                         .position_to_buffer_index(terminal, x + row_index, y + line_index);
 
-                terminal.buffer[buffer_index] = c;
+                terminal.buffer[buffer_index].character = c;
             }
         }
     }
@@ -392,7 +437,7 @@ impl Widget for ItemList {
                 let buffer_index =
                     self.area
                         .position_to_buffer_index(terminal, x_offset + x, y_offset + y);
-                terminal.buffer[buffer_index] = c;
+                terminal.buffer[buffer_index].character = c;
             }
         }
     }
@@ -494,7 +539,7 @@ impl Widget for Table {
                         x_offset + x + k,
                         y_offset + y,
                     );
-                    terminal.buffer[buffer_index] = c;
+                    terminal.buffer[buffer_index].character = c;
                 }
             }
         }
