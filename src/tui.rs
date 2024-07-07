@@ -8,6 +8,7 @@ use std::io::{stdout, Write};
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
 // TODO: Add floating panel
+// TODO: Can we get away with '&str' instead of 'String' everywhere in the Tui?
 pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
     fn height(&self) -> usize;
@@ -403,8 +404,12 @@ impl Text {
         }
     }
 
-    pub fn swap_text(&mut self, new_text: &mut String) {
-        std::mem::swap(&mut self.text, new_text);
+    pub fn change_text(&mut self, new_text: Option<String>) {
+        if let Some(text) = new_text {
+            self.text = text;
+        } else {
+            self.text = "".into();
+        }
         self.lines_count = self.text.chars().filter(|c| *c == '\n').count();
     }
 }
