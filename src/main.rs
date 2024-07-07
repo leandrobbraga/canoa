@@ -19,6 +19,7 @@ fn main() {
     let issues = jira.get_backlog_issues(&board_id);
 
     let first_issue = issues[0].clone();
+    let second_issue = issues[7].clone();
 
     let mut terminal = tui::Terminal::new();
     let area = terminal.area();
@@ -53,7 +54,7 @@ fn main() {
         .fields
         .description
         .unwrap_or("This place will contain the selected issue details.".into());
-    let issue_details_tui = right.text(
+    let mut issue_details_tui = right.text(
         description,
         tui::VerticalAlignment::Center,
         tui::HorizontalAlignment::Left,
@@ -65,5 +66,20 @@ fn main() {
 
     terminal.flush();
 
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    issues_tui.set_selected(Some(7));
+    let mut description = second_issue
+        .fields
+        .description
+        .unwrap_or("This place will contain the selected issue details.".into());
+    issue_details_tui.swap_text(&mut description);
+
+    sprints_tui.render(&mut terminal);
+    issues_tui.render(&mut terminal);
+    issue_details_tui.render(&mut terminal);
+
+    terminal.flush();
+
+    std::thread::sleep(std::time::Duration::from_secs(5));
 }

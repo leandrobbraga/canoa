@@ -26,31 +26,41 @@ struct Cell {
     background_color: Color,
 }
 
+impl Default for Cell {
+    fn default() -> Self {
+        Cell {
+            character: ' ',
+            foreground_color: Color::Default,
+            background_color: Color::Default,
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Color {
     // User's terminal default color
+    Black,
+    Cyan,
     Default,
     Green,
-    Cyan,
-    Black,
 }
 
 impl Color {
     fn apply_foreground(&self) {
         match self {
-            Color::Green => print!("\x1b[32m"),
+            Color::Black => print!("\x1b[30m"),
             Color::Cyan => print!("\x1b[36m"),
             Color::Default => print!("\x1b[39m"),
-            Color::Black => print!("\x1b[30m"),
+            Color::Green => print!("\x1b[32m"),
         }
     }
 
     fn apply_background(&self) {
         match self {
-            Color::Green => print!("\x1b[42m"),
+            Color::Black => print!("\x1b[40m"),
             Color::Cyan => print!("\x1b[46m"),
             Color::Default => print!("\x1b[49m"),
-            Color::Black => print!("\x1b[40m"),
+            Color::Green => print!("\x1b[42m"),
         }
     }
 }
@@ -73,20 +83,13 @@ impl Terminal {
         let (width, height) = Terminal::size().unwrap();
 
         Terminal {
-            buffer: vec![
-                Cell {
-                    character: ' ',
-                    foreground_color: Color::Default,
-                    background_color: Color::Default
-                };
-                width * height
-            ],
+            buffer: vec![Cell::default(); width * height],
             width,
             height,
         }
     }
 
-    pub fn flush(&self) {
+    pub fn flush(&mut self) {
         Terminal::clear_screen();
 
         // We always start with the Default color to ensure consistency
@@ -115,7 +118,8 @@ impl Terminal {
             }
         }
 
-        stdout().flush().unwrap()
+        stdout().flush().unwrap();
+        self.buffer.fill(Cell::default())
     }
 
     pub fn area(&self) -> Rectangle {
@@ -398,6 +402,11 @@ impl Text {
             lines_count,
         }
     }
+
+    pub fn swap_text(&mut self, new_text: &mut String) {
+        std::mem::swap(&mut self.text, new_text);
+        self.lines_count = self.text.chars().filter(|c| *c == '\n').count();
+    }
 }
 impl Widget for Text {
     fn render(&self, terminal: &mut Terminal) {
@@ -671,3 +680,5 @@ impl Widget for Table {
         self.area.set_title(title);
     }
 }
+
+// TODO: Add tests with expectations
