@@ -3,12 +3,14 @@ mod jira;
 mod tui;
 
 use config::Config;
+use jira::{Issue, Jira, Sprint};
 use tui::{Color, Widget};
 
+// FIXME: Perform better error handling instead of unwrapping everything.
 struct App {
-    jira: jira::Jira,
-    sprints: Vec<jira::Sprint>,
-    issues: Vec<jira::Issue>,
+    jira: Jira,
+    sprints: Vec<Sprint>,
+    issues: Vec<Issue>,
     active_sprint: usize,
     active_issue: usize,
 
@@ -24,14 +26,14 @@ impl App {
             host,
         } = config;
 
-        let jira = jira::Jira::new(&user, &token, host);
+        let jira = Jira::new(&user, &token, host);
 
         let sprints = jira.get_board_active_and_future_sprints(&board_id);
         let issues = jira.get_backlog_issues(&board_id);
 
-        let terminal = tui::Terminal::new();
+        let tui = tui::Terminal::try_new().unwrap();
 
-        let area = terminal.area();
+        let area = tui.area();
         let (left, mut right) = area.split_horizontally_at(0.2);
         let (mut top, mut botton) = left.split_vertically();
 
@@ -66,12 +68,12 @@ impl App {
             .unwrap_or("This place will contain the selected issue details.".into());
         let issue_details_tui = right.text(
             description,
-            tui::VerticalAlignment::Center,
+            tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
         );
 
         let tui = Tui {
-            terminal,
+            tui,
             sprints: sprints_tui,
             issues: issues_tui,
             issue_details: issue_details_tui,
@@ -93,21 +95,23 @@ impl App {
             .issue_details
             .change_text(self.issues[index].fields.description.clone())
     }
-
-    fn render(&mut self) {
-        self.tui.sprints.render(&mut self.tui.terminal);
-        self.tui.issues.render(&mut self.tui.terminal);
-        self.tui.issue_details.render(&mut self.tui.terminal);
-
-        self.tui.terminal.flush();
-    }
 }
 
 struct Tui {
-    terminal: tui::Terminal,
+    tui: tui::Terminal,
     sprints: tui::ItemList,
     issues: tui::Table,
     issue_details: tui::Text,
+}
+
+impl Tui {
+    fn render(&mut self) {
+        self.sprints.render(&mut self.tui);
+        self.issues.render(&mut self.tui);
+        self.issue_details.render(&mut self.tui);
+
+        self.tui.draw();
+    }
 }
 
 fn main() {
@@ -115,15 +119,13 @@ fn main() {
 
     let mut app = App::from_config(config);
 
-    loop {
-        app.select_issue(0);
-        app.render();
+    app.select_issue(0);
+    app.tui.render();
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
+    std::thread::sleep(std::time::Duration::from_secs(1));
 
-        app.select_issue(7);
-        app.render();
+    app.select_issue(7);
+    app.tui.render();
 
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
+    std::thread::sleep(std::time::Duration::from_secs(1));
 }

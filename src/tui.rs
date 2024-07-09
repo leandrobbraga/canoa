@@ -3,6 +3,9 @@
 //! covered and it just splits it between different widgets.
 
 use std::io::{stdout, Write};
+use std::{mem::MaybeUninit, os::fd::AsRawFd};
+
+use libc::termios as Termios;
 
 // TODO: Introduce the concept of scrooling, both vertical and horizontal
 // TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
@@ -20,78 +23,87 @@ pub trait Widget {
     // TODO: Add methods for inner height and width for content rendering.
 }
 
-#[derive(Copy, Clone)]
-struct Cell {
-    character: char,
-    foreground_color: Color,
-    background_color: Color,
-}
-
-impl Default for Cell {
-    fn default() -> Self {
-        Cell {
-            character: ' ',
-            foreground_color: Color::Default,
-            background_color: Color::Default,
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum Color {
-    // User's terminal default color
-    Black,
-    Cyan,
-    Default,
-    Green,
-}
-
-impl Color {
-    fn apply_foreground(&self) {
-        match self {
-            Color::Black => print!("\x1b[30m"),
-            Color::Cyan => print!("\x1b[36m"),
-            Color::Default => print!("\x1b[39m"),
-            Color::Green => print!("\x1b[32m"),
-        }
-    }
-
-    fn apply_background(&self) {
-        match self {
-            Color::Black => print!("\x1b[40m"),
-            Color::Cyan => print!("\x1b[46m"),
-            Color::Default => print!("\x1b[49m"),
-            Color::Green => print!("\x1b[42m"),
-        }
-    }
-}
-
 pub struct Terminal {
     buffer: Vec<Cell>,
     width: usize,
     height: usize,
+
+    tty: std::fs::File,
+    termios: Termios,
 }
 
 impl Drop for Terminal {
     fn drop(&mut self) {
+        if let Err(err) = self.disable_raw_mode() {
+            eprintln!("ERROR: Could not return the terminal to canonical mode, run 'reset' to force it back: {err}")
+        };
+
         Terminal::make_cursor_visible();
     }
 }
 
 impl Terminal {
-    pub fn new() -> Terminal {
-        Terminal::make_cursor_invisible();
+    pub fn try_new() -> std::io::Result<Terminal> {
+        let tty = std::fs::File::open("/dev/tty")?;
+
+        let termios = Terminal::init_termios(&tty)?;
         let (width, height) = Terminal::size().unwrap();
 
-        Terminal {
+        let terminal = Terminal {
             buffer: vec![Cell::default(); width * height],
             width,
             height,
+            tty,
+            termios,
+        };
+
+        terminal.enable_raw_mode()?;
+
+        Terminal::make_cursor_invisible();
+
+        Ok(terminal)
+    }
+
+    fn init_termios(tty: &std::fs::File) -> Result<Termios, std::io::Error> {
+        unsafe {
+            let mut termios: MaybeUninit<Termios> = MaybeUninit::uninit();
+
+            if libc::tcgetattr(tty.as_raw_fd(), termios.as_mut_ptr()) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            Ok(termios.assume_init())
         }
     }
 
-    pub fn flush(&mut self) {
+    fn enable_raw_mode(&self) -> std::io::Result<()> {
+        // We keep the original Termios untouched so we can reset it's state back
+        let mut termios = self.termios.clone();
+
+        unsafe { libc::cfmakeraw(&mut termios) }
+
+        unsafe {
+            if libc::tcsetattr(self.tty.as_raw_fd(), libc::TCSANOW, &termios) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn disable_raw_mode(&mut self) -> std::io::Result<()> {
+        unsafe {
+            if libc::tcsetattr(self.tty.as_raw_fd(), libc::TCSANOW, &self.termios) < 0 {
+                return Err(std::io::Error::last_os_error());
+            };
+        }
+
+        Ok(())
+    }
+
+    pub fn draw(&mut self) {
         Terminal::clear_screen();
+        Terminal::move_to_home_position();
 
         // We always start with the Default color to ensure consistency
         let mut current_foreground_color = Color::Default;
@@ -100,8 +112,6 @@ impl Terminal {
         current_background_color.apply_background();
 
         for line in (0..self.buffer.len()).step_by(self.width) {
-            print!("\n");
-
             for i in line..line + self.width {
                 let cell = self.buffer[i];
 
@@ -683,6 +693,52 @@ impl Widget for Table {
 
     fn set_title(&mut self, title: Option<String>) {
         self.area.set_title(title);
+    }
+}
+
+#[derive(Copy, Clone)]
+struct Cell {
+    character: char,
+    foreground_color: Color,
+    background_color: Color,
+}
+
+impl Default for Cell {
+    fn default() -> Self {
+        Cell {
+            character: ' ',
+            foreground_color: Color::Default,
+            background_color: Color::Default,
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum Color {
+    // User's terminal default color
+    Black,
+    Cyan,
+    Default,
+    Green,
+}
+
+impl Color {
+    fn apply_foreground(&self) {
+        match self {
+            Color::Black => print!("\x1b[30m"),
+            Color::Cyan => print!("\x1b[36m"),
+            Color::Default => print!("\x1b[39m"),
+            Color::Green => print!("\x1b[32m"),
+        }
+    }
+
+    fn apply_background(&self) {
+        match self {
+            Color::Black => print!("\x1b[40m"),
+            Color::Cyan => print!("\x1b[46m"),
+            Color::Default => print!("\x1b[49m"),
+            Color::Green => print!("\x1b[42m"),
+        }
     }
 }
 
