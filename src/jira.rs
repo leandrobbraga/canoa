@@ -95,7 +95,7 @@ impl Jira {
             "{}rest/agile/1.0/board/{board_id}/sprint/{sprint_id}/issue",
             self.host.as_ref()
         ))
-        .set("Authorization", &self.authorization.as_ref())
+        .set("Authorization", self.authorization.as_ref())
         .query(
             "fields",
             "summary, status, labels, assignee, issuetype, description",
@@ -119,7 +119,7 @@ impl Jira {
             "{}rest/agile/1.0/board/{board_id}/sprint",
             self.host.as_ref()
         ))
-        .set("Authorization", &self.authorization.as_ref())
+        .set("Authorization", self.authorization.as_ref())
         .query("state", "active, future")
         .call()
         .unwrap()
@@ -139,7 +139,7 @@ impl Jira {
             "{}rest/agile/1.0/board/{board_id}/backlog",
             self.host.as_ref()
         ))
-        .set("Authorization", &self.authorization.as_ref())
+        .set("Authorization", self.authorization.as_ref())
         .query(
             "fields",
             "summary, status, labels, assignee, issuetype, description",
