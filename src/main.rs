@@ -2,6 +2,8 @@ mod config;
 mod jira;
 mod tui;
 
+use std::io::Read;
+
 use config::Config;
 use jira::{Issue, Jira, Sprint};
 use tui::{Color, Widget};
@@ -89,11 +91,39 @@ impl App {
         }
     }
 
-    fn select_issue(&mut self, index: usize) {
-        self.tui.issues.set_selected(Some(index));
+    fn move_issue_selection_up(&mut self) {
+        if self.active_issue >= self.issues.len() {
+            return;
+        }
+
+        self.active_issue += 1;
+
+        self.sync_selection();
+    }
+
+    fn move_issue_selection_down(&mut self) {
+        if self.active_issue <= 0 {
+            return;
+        }
+
+        self.active_issue -= 1;
+
+        self.sync_selection();
+    }
+
+    fn sync_selection(&mut self) {
+        self.tui.issues.set_selected(Some(self.active_issue));
         self.tui
             .issue_details
-            .change_text(self.issues[index].fields.description.clone())
+            .change_text(self.issues[self.active_issue].fields.description.clone());
+        self.tui.issue_details.set_title(Some(format!(
+            "[ {} ]",
+            self.issues[self.active_issue].name.clone()
+        )));
+    }
+
+    fn input(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
+        self.tui.tui.tty()
     }
 }
 
@@ -118,14 +148,20 @@ fn main() {
     let config = config::configuration().unwrap();
 
     let mut app = App::from_config(config);
+    let mut input = app.input().unwrap();
 
-    app.select_issue(0);
-    app.tui.render();
+    loop {
+        app.tui.render();
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+        let Some(b) = input.next() else { break };
+        let b = b.unwrap();
 
-    app.select_issue(7);
-    app.tui.render();
-
-    std::thread::sleep(std::time::Duration::from_secs(1));
+        // TODO: Add possibility to change from issues to sprint view with (1) and (2)
+        match b {
+            b'j' => app.move_issue_selection_down(),
+            b'k' => app.move_issue_selection_up(),
+            b'q' => break,
+            _ => (),
+        };
+    }
 }

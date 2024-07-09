@@ -2,7 +2,7 @@
 //! It's inspired in the tiling window manager system, where the user always have the whole screen
 //! covered and it just splits it between different widgets.
 
-use std::io::{stdout, Write};
+use std::io::{stdout, Read, Write};
 use std::{mem::MaybeUninit, os::fd::AsRawFd};
 
 use libc::termios as Termios;
@@ -103,7 +103,6 @@ impl Terminal {
 
     pub fn draw(&mut self) {
         Terminal::clear_screen();
-        Terminal::move_to_home_position();
 
         // We always start with the Default color to ensure consistency
         let mut current_foreground_color = Color::Default;
@@ -176,6 +175,10 @@ impl Terminal {
 
     fn make_cursor_visible() {
         print!("\x1b[?25h");
+    }
+
+    pub fn tty(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
+        self.tty.try_clone().map(|file| file.bytes())
     }
 }
 
