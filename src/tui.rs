@@ -78,7 +78,7 @@ impl Terminal {
 
     fn enable_raw_mode(&self) -> std::io::Result<()> {
         // We keep the original Termios untouched so we can reset it's state back
-        let mut termios = self.termios.clone();
+        let mut termios = self.termios;
 
         unsafe { libc::cfmakeraw(&mut termios) }
 
@@ -151,8 +151,6 @@ impl Terminal {
                 return Err(std::io::Error::last_os_error());
             }
 
-            // FIXME: We are removing '-1' here because we're adding an extra println! at the end,
-            // not showing the whole screen at once
             Ok((size.col as usize, size.row as usize))
         }
     }

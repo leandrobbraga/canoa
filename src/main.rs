@@ -2,8 +2,6 @@ mod config;
 mod jira;
 mod tui;
 
-use std::io::Read;
-
 use config::Config;
 use jira::{Issue, Jira, Sprint};
 use tui::{Color, Widget};
@@ -47,6 +45,7 @@ impl App {
             tui::HorizontalAlignment::Center,
         );
 
+        // TODO: Add scrolling
         let issues_table: Vec<Vec<String>> = issues
             .iter()
             .take(botton.height() - 2)
@@ -102,7 +101,7 @@ impl App {
     }
 
     fn move_issue_selection_down(&mut self) {
-        if self.active_issue <= 0 {
+        if self.active_issue == 0 {
             return;
         }
 
