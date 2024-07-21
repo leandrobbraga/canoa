@@ -7,11 +7,11 @@ use std::{mem::MaybeUninit, os::fd::AsRawFd};
 
 use libc::termios as Termios;
 
-// TODO: Introduce the concept of scrooling, both vertical and horizontal
-// TODO: Add wrap-around/truncate option to text, including in lists and tables instead of panicking
+// TODO: Introduce the concept of vertical scrolling
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
 // TODO: Add floating panel
 // TODO: Can we get away with '&str' instead of 'String' everywhere in the Tui?
+// TODO: Handle resizes
 pub trait Widget {
     fn render(&self, terminal: &mut Terminal);
     fn height(&self) -> usize;
@@ -401,10 +401,9 @@ impl Text {
         horizontal_alignment: HorizontalAlignment,
         area: Rectangle,
     ) -> Text {
-        // FIXME: Deal with hardwrap
-        let lines_count = text.chars().filter(|c| *c == '\n').count();
-
-        assert!(lines_count < area.height - 2);
+        let lines_count = HardwrappingText::new(&text, area.width() - 2)
+            .into_iter()
+            .count();
 
         Text {
             text,
@@ -421,7 +420,10 @@ impl Text {
         } else {
             self.text = "".into();
         }
-        self.lines_count = self.text.chars().filter(|c| *c == '\n').count();
+
+        self.lines_count = HardwrappingText::new(&self.text, self.area.width() - 2)
+            .into_iter()
+            .count();
     }
 }
 impl Widget for Text {
@@ -434,18 +436,21 @@ impl Widget for Text {
             VerticalAlignment::Center => (self.height() - self.lines_count) / 2,
         };
 
-        for (line_index, line) in self.text.lines().enumerate() {
-            let line_lenght = line.len();
-
+        let hardwrapped_lines = HardwrappingText::new(&self.text, self.width() - 2);
+        for (line_index, line) in hardwrapped_lines
+            .into_iter()
+            // FIXME: Deal with scrolling
+            .take(self.height() - 2)
+            .enumerate()
+        {
             let x = match self.horizontal_alignment {
                 HorizontalAlignment::Left => 1, // 1 for the border
                 HorizontalAlignment::Right => {
-                    self.width() - line_lenght - 1 // -1 for the border
+                    self.width() - line.len() - 1 // -1 for the border
                 }
-                HorizontalAlignment::Center => (self.width() - line_lenght) / 2,
+                HorizontalAlignment::Center => (self.width() - line.len()) / 2,
             };
 
-            // FIXME: Deal with hardwrap
             for (row_index, c) in line.chars().enumerate() {
                 let buffer_index =
                     self.area
@@ -740,6 +745,48 @@ impl Color {
             Color::Default => print!("\x1b[49m"),
             Color::Green => print!("\x1b[42m"),
         }
+    }
+}
+
+struct HardwrappingText<'a> {
+    text: &'a str,
+    width: usize,
+}
+
+impl<'a> HardwrappingText<'a> {
+    pub fn new(text: &'a str, width: usize) -> Self {
+        Self { text, width }
+    }
+}
+
+impl<'a> Iterator for HardwrappingText<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.text.is_empty() {
+            return None;
+        }
+
+        let mut strip_newline = false;
+        let line_end = match self.text.find('\n') {
+            Some(position) => {
+                strip_newline = true;
+                position
+            }
+            None => self.text.len(),
+        };
+
+        // FIXME: Account for word boundaries
+        let hardwrapped_line_end = usize::min(self.width, line_end);
+
+        let result = &self.text[0..hardwrapped_line_end];
+        self.text = &self.text[hardwrapped_line_end + strip_newline as usize..];
+
+        Some(result)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.text.chars().filter(|c| *c == '\n').count(), None)
     }
 }
 
