@@ -90,7 +90,8 @@ impl App {
         }
     }
 
-    fn move_issue_selection_up(&mut self) {
+    fn move_issue_selection_down(&mut self) {
+        // FIXME: Deal with scrolling, currently is panicking
         if self.active_issue >= self.issues.len() {
             return;
         }
@@ -100,7 +101,7 @@ impl App {
         self.sync_selection();
     }
 
-    fn move_issue_selection_down(&mut self) {
+    fn move_issue_selection_up(&mut self) {
         if self.active_issue == 0 {
             return;
         }
