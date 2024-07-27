@@ -52,6 +52,7 @@ impl App {
             .map(|issue| vec![issue.name.clone(), issue.fields.status.clone()])
             .collect();
 
+        // TODO: Include more informatio about the issue such as who is assigned to the task
         botton.set_title(Some("[ Issues ]".into()));
         let mut issues_tui = botton.table(
             issues_table,
@@ -148,16 +149,18 @@ fn main() {
     let config = config::configuration().unwrap();
 
     let mut app = App::from_config(config);
-    let mut input = app.input().unwrap();
+    let mut inputs = app.input().unwrap();
 
     loop {
         app.tui.render();
 
-        let Some(b) = input.next() else { break };
-        let b = b.unwrap();
+        let Some(input) = inputs.next().map(|input| input.unwrap()) else {
+            break;
+        };
 
         // TODO: Add possibility to change from issues to sprint view with (1) and (2)
-        match b {
+        // TODO: Allow filtering issues by who is assigned to it
+        match input {
             b'j' => app.move_issue_selection_down(),
             b'k' => app.move_issue_selection_up(),
             b'q' => break,
