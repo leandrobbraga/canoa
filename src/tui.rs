@@ -375,7 +375,7 @@ impl Widget for Rectangle {
 }
 
 pub struct Text {
-    text: String,
+    text: Vec<char>,
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
     area: Rectangle,
@@ -401,6 +401,7 @@ impl Text {
         horizontal_alignment: HorizontalAlignment,
         area: Rectangle,
     ) -> Text {
+        let text: Vec<char> = text.chars().collect();
         let lines_count = HardwrappingText::new(&text, area.width() - 2)
             .into_iter()
             .count();
@@ -416,9 +417,9 @@ impl Text {
 
     pub fn change_text(&mut self, new_text: Option<String>) {
         if let Some(text) = new_text {
-            self.text = text;
+            self.text = text.chars().collect();
         } else {
-            self.text = "".into();
+            self.text.clear();
         }
 
         self.lines_count = HardwrappingText::new(&self.text, self.area.width() - 2)
@@ -451,12 +452,12 @@ impl Widget for Text {
                 HorizontalAlignment::Center => (self.width() - line.len()) / 2,
             };
 
-            for (row_index, c) in line.chars().enumerate() {
+            for (row_index, c) in line.iter().enumerate() {
                 let buffer_index =
                     self.area
                         .position_to_buffer_index(terminal, x + row_index, y + line_index);
 
-                terminal.buffer[buffer_index].character = c;
+                terminal.buffer[buffer_index].character = *c;
             }
         }
     }
@@ -749,44 +750,44 @@ impl Color {
 }
 
 struct HardwrappingText<'a> {
-    text: &'a str,
+    text: &'a [char],
     width: usize,
 }
 
 impl<'a> HardwrappingText<'a> {
-    pub fn new(text: &'a str, width: usize) -> Self {
+    pub fn new(text: &'a [char], width: usize) -> Self {
         Self { text, width }
     }
 }
 
 impl<'a> Iterator for HardwrappingText<'a> {
-    type Item = &'a str;
+    type Item = &'a [char];
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.text.is_empty() {
             return None;
         }
 
-        let mut strip_newline = false;
-        let line_end = match self.text.find('\n') {
+        let mut found_newline = false;
+        let line_end = match self.text.iter().position(|c| c == &'\n') {
             Some(position) => {
-                strip_newline = true;
+                found_newline = true;
                 position
             }
             None => self.text.len(),
         };
 
         // FIXME: Account for word boundaries
+
+        // We do not want to print the '\n' but we do want to remove it from the buffer so we can
+        // parse the next line later, otherwise it gets stuck
+        let strip_newline = found_newline & (line_end <= self.width);
         let hardwrapped_line_end = usize::min(self.width, line_end);
 
         let result = &self.text[0..hardwrapped_line_end];
         self.text = &self.text[hardwrapped_line_end + strip_newline as usize..];
 
         Some(result)
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.text.chars().filter(|c| *c == '\n').count(), None)
     }
 }
 
