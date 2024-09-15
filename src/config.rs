@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::{fs::File, io::Read};
 
+const CONFIG_FILEPATH: &str = ".env";
+
 pub struct Config {
     pub user: Box<str>,
     pub token: Box<str>,
@@ -18,7 +20,7 @@ pub fn configuration() -> Result<Config, ()> {
         std::env::var(key)
             .or_else(|_| variables.remove(key).ok_or(()))
             .map(|value| value.into_boxed_str())
-            .map_err(|_| println!("ERROR: Missing variable {key}"))
+            .map_err(|_| eprintln!("ERROR: Missing variable {key}"))
     };
 
     let user = get_variable("JIRA_USER")?;
@@ -37,11 +39,10 @@ pub fn configuration() -> Result<Config, ()> {
 fn parse_dotenv() -> Result<HashMap<String, String>, ()> {
     let mut variables = HashMap::with_capacity(2);
     let mut content = Vec::new();
-    let config_filepath = "./.env";
 
-    File::open(config_filepath)
+    File::open(CONFIG_FILEPATH)
         .and_then(|mut file| file.read_to_end(&mut content))
-        .map_err(|err| eprintln!("ERROR: could not read file {config_filepath}: {err}"))?;
+        .map_err(|err| eprintln!("ERROR: could not read file {CONFIG_FILEPATH}: {err}"))?;
 
     let mut view = content.as_slice();
 

@@ -9,6 +9,7 @@ use tui::{Color, Widget};
 // FIXME: Perform better error handling instead of unwrapping everything.
 struct App {
     jira: Jira,
+
     sprints: Vec<Sprint>,
     issues: Vec<Issue>,
     active_sprint: usize,
