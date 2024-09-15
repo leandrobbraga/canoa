@@ -1,16 +1,24 @@
 # Canoa
 
+> [!WARNING]
+> THIS SOFTWARE IS INCOMPLETE AND FULL OF BUGS! IT'S NOT IN AN USABLE STATE YET. 
+> USE IT AT YOUR OWN RISK!
+
 Canoa is a minimal-dependency Jira Terminal User Interface (TUI).
 
 ## Authorization
 
 The application utilizes [Basic Auth](https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/)
-for API authorization.
-To generate an API token, please refer to [this documentation](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+for API authorization. To generate an API token, please refer to [this documentation](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
 
 ## Configuration
 
-Configuration can be done through environment variables or a `.env` file.
+Configuration can be done through environment variables or a `.env` file. 
+
+Precedence rule:
+
+1. environment variables
+2. .env
 
 ### Current Configuration Parameters:
 
