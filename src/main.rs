@@ -35,7 +35,7 @@ impl App {
         let tui = tui::Terminal::try_new().unwrap();
 
         let rendering_region = tui.rendering_region();
-        let (left, mut right) = rendering_region.split_vertically_at(0.2);
+        let (left, mut right) = rendering_region.split_vertically_at(0.35);
         let (mut top, mut botton) = left.split_hotizontally_();
 
         top.set_title(Some("[ Sprints ]".into()));
@@ -43,13 +43,13 @@ impl App {
         let sprints_tui = top.item_list(
             sprint_list,
             tui::VerticalAlignment::Top,
-            tui::HorizontalAlignment::Center,
+            tui::HorizontalAlignment::Left,
         );
 
         // TODO: Add scrolling
         let issues_table: Vec<Vec<String>> = issues
             .iter()
-            .take(botton.height() - 2)
+            .take(botton.inner_size().height)
             .map(|issue| vec![issue.name.clone(), issue.fields.status.clone()])
             .collect();
 
@@ -57,7 +57,7 @@ impl App {
         let mut issues_tui = botton.table(
             issues_table,
             tui::VerticalAlignment::Top,
-            tui::HorizontalAlignment::Center,
+            tui::HorizontalAlignment::Left,
         );
         issues_tui.set_border_color(Color::Green);
         issues_tui.set_selected(Some(0));
@@ -137,9 +137,9 @@ struct Tui {
 
 impl Tui {
     fn render(&mut self) {
-        self.sprints.render(&mut self.tui);
-        self.issues.render(&mut self.tui);
-        self.issue_details.render(&mut self.tui);
+        self.sprints.render(&mut self.tui.buffer);
+        self.issues.render(&mut self.tui.buffer);
+        self.issue_details.render(&mut self.tui.buffer);
 
         self.tui.draw();
     }

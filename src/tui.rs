@@ -3,6 +3,7 @@
 //! covered and it just splits it between different widgets.
 
 use std::io::{stdout, Read, Write};
+use std::ops::{Add, AddAssign};
 use std::{mem::MaybeUninit, os::fd::AsRawFd};
 
 use libc::termios as Termios;
@@ -13,21 +14,71 @@ use libc::termios as Termios;
 // TODO: Can we get away with '&str' instead of 'String' everywhere in the Tui?
 // TODO: Handle resizes
 pub trait Widget {
-    fn render(&self, terminal: &mut Terminal);
-    fn height(&self) -> usize;
-    fn width(&self) -> usize;
+    fn render(&self, buffer: &mut Buffer);
+    fn size(&self) -> Size;
+    fn inner_size(&self) -> Size;
 
     fn set_border_color(&mut self, color: Color);
     fn set_title(&mut self, title: Option<String>);
 
+    fn rendering_region(self) -> RenderingRegion;
     // TODO: Add methods for inner height and width for content rendering.
 }
 
-pub struct Terminal {
-    buffer: Vec<Cell>,
-    width: usize,
-    height: usize,
+#[derive(Default, Clone, Copy)]
+pub struct Vector2 {
+    x: usize,
+    y: usize,
+}
 
+impl Vector2 {
+    fn new(x: usize, y: usize) -> Self {
+        Self { x, y }
+    }
+}
+
+impl Add<Vector2> for Vector2 {
+    type Output = Vector2;
+
+    fn add(mut self, rhs: Vector2) -> Self::Output {
+        self.x += rhs.x;
+        self.y += rhs.y;
+
+        self
+    }
+}
+
+impl AddAssign for Vector2 {
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+pub struct Buffer {
+    size: Size,
+    data: Vec<Cell>,
+}
+
+impl Buffer {
+    fn new(size: Size) -> Self {
+        Buffer {
+            size,
+            data: vec![Cell::default(); size.width * size.height],
+        }
+    }
+
+    #[inline(always)]
+    fn cell_mut(&mut self, position: Vector2) -> &mut Cell {
+        debug_assert!(position.x <= self.size.width);
+        debug_assert!(position.y <= self.size.height);
+
+        &mut self.data[self.size.width * position.y + position.x]
+    }
+}
+
+pub struct Terminal {
+    pub buffer: Buffer,
     tty: std::fs::File,
     termios: Termios,
 }
@@ -47,12 +98,10 @@ impl Terminal {
         let tty = std::fs::File::open("/dev/tty")?;
 
         let termios = Terminal::init_termios(&tty)?;
-        let (width, height) = Terminal::size().unwrap();
+        let size = Terminal::size().unwrap();
 
         let terminal = Terminal {
-            buffer: vec![Cell::default(); width * height],
-            width,
-            height,
+            buffer: Buffer::new(size),
             tty,
             termios,
         };
@@ -110,33 +159,31 @@ impl Terminal {
         current_foreground_color.apply_foreground();
         current_background_color.apply_background();
 
-        for line in (0..self.buffer.len()).step_by(self.width) {
-            for i in line..line + self.width {
-                let cell = self.buffer[i];
-
-                if cell.foreground_color != current_foreground_color {
-                    current_foreground_color = cell.foreground_color;
-                    current_foreground_color.apply_foreground();
-                }
-
-                if cell.background_color != current_background_color {
-                    current_background_color = cell.background_color;
-                    current_background_color.apply_background();
-                }
-
-                print!("{}", cell.character)
+        for cell in &self.buffer.data {
+            if cell.foreground_color != current_foreground_color {
+                current_foreground_color = cell.foreground_color;
+                current_foreground_color.apply_foreground();
             }
+
+            if cell.background_color != current_background_color {
+                current_background_color = cell.background_color;
+                current_background_color.apply_background();
+            }
+
+            print!("{}", cell.character)
         }
 
         stdout().flush().unwrap();
-        self.buffer.fill(Cell::default())
+        self.buffer.data.fill(Cell::default())
     }
 
     pub fn rendering_region(&self) -> RenderingRegion {
-        RenderingRegion::new(None, 0, 0, self.width, self.height)
+        let size = self.buffer.size;
+
+        RenderingRegion::new(None, Vector2::default(), size)
     }
 
-    fn size() -> std::io::Result<(usize, usize)> {
+    fn size() -> std::io::Result<Size> {
         #[repr(C)]
         struct TermSize {
             row: libc::c_ushort,
@@ -151,16 +198,11 @@ impl Terminal {
                 return Err(std::io::Error::last_os_error());
             }
 
-            Ok((size.col as usize, size.row as usize))
+            Ok(Size {
+                width: size.col as usize,
+                height: size.row as usize,
+            })
         }
-    }
-
-    #[inline(always)]
-    fn position_to_buffer_index(&self, x: usize, y: usize) -> usize {
-        debug_assert!(x <= self.width);
-        debug_assert!(y <= self.height);
-
-        y * self.width + x
     }
 
     fn clear_screen() {
@@ -180,29 +222,31 @@ impl Terminal {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct Size {
+    pub width: usize,
+    pub height: usize,
+}
+
+impl Size {
+    fn new(width: usize, height: usize) -> Self {
+        Self { width, height }
+    }
+}
+
 pub struct RenderingRegion {
     title: Option<String>,
-    x: usize,
-    y: usize,
-    width: usize,
-    height: usize,
+    position: Vector2,
+    size: Size,
     border_color: Color,
 }
 
 impl RenderingRegion {
-    fn new(
-        title: Option<String>,
-        x: usize,
-        y: usize,
-        width: usize,
-        height: usize,
-    ) -> RenderingRegion {
+    fn new(title: Option<String>, position: Vector2, size: Size) -> RenderingRegion {
         RenderingRegion {
             title,
-            x,
-            y,
-            width,
-            height,
+            position,
+            size,
             border_color: Color::Default,
         }
     }
@@ -221,23 +265,19 @@ impl RenderingRegion {
     pub fn split_vertically_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
-        let left_width = (self.width as f32 * percentage) as usize;
-        let right_width = self.width - left_width;
+        let left_width = (self.size.width as f32 * percentage) as usize;
+        let right_width = self.size.width - left_width;
 
         let left = RenderingRegion {
             title: None,
-            x: self.x,
-            y: self.y,
-            width: left_width,
-            height: self.height,
+            position: self.position,
+            size: Size::new(left_width, self.size.height),
             border_color: self.border_color,
         };
         let right = RenderingRegion {
             title: None,
-            x: self.x + left_width,
-            y: self.y,
-            width: right_width,
-            height: self.height,
+            position: self.position + Vector2::new(left_width, 0),
+            size: Size::new(right_width, self.size.height),
             border_color: self.border_color,
         };
 
@@ -258,23 +298,19 @@ impl RenderingRegion {
     pub fn split_hotizontally_at_(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
-        let top_height = (self.height as f32 * percentage) as usize;
-        let bottom_height = self.height - top_height;
+        let top_height = (self.size.height as f32 * percentage) as usize;
+        let bottom_height = self.size.height - top_height;
 
         let top = RenderingRegion {
             title: None,
-            x: self.x,
-            y: self.y,
-            width: self.width,
-            height: top_height,
+            position: self.position,
+            size: Size::new(self.size.width, top_height),
             border_color: self.border_color,
         };
         let bottom = RenderingRegion {
             title: None,
-            x: self.x,
-            y: self.y + top_height,
-            width: self.width,
-            height: bottom_height,
+            position: self.position + Vector2::new(0, top_height),
+            size: Size::new(self.size.width, bottom_height),
             border_color: self.border_color,
         };
 
@@ -309,73 +345,82 @@ impl RenderingRegion {
     }
 
     #[inline(always)]
-    fn position_to_buffer_index(&self, terminal: &Terminal, x: usize, y: usize) -> usize {
-        debug_assert!(x <= self.width);
-        debug_assert!(y <= self.height);
+    fn cell_mut<'a>(&self, buffer: &'a mut Buffer, position: Vector2) -> &'a mut Cell {
+        debug_assert!(position.x <= self.size.width);
+        debug_assert!(position.y <= self.size.height);
 
-        terminal.position_to_buffer_index(self.x + x, self.y + y)
+        buffer.cell_mut(self.position + position)
     }
-}
 
-impl Widget for RenderingRegion {
-    fn render(&self, terminal: &mut Terminal) {
-        // We iterate in this order to help with cache locality
-        for y in 0..self.height {
-            for x in 0..self.width {
-                let buffer_index = self.position_to_buffer_index(terminal, x, y);
+    fn highlight_row(&self, buffer: &mut Buffer, selected_row: usize) {
+        // We avoid highlighting the borders
+        for column in 1..self.size.width - 1 {
+            let cell = self.cell_mut(buffer, Vector2::new(column, selected_row));
+
+            cell.background_color = Color::Cyan;
+            cell.foreground_color = Color::Black;
+        }
+    }
+
+    fn render(&self, buffer: &mut Buffer) {
+        // Render the border
+        for y in 0..self.size.height {
+            for x in 0..self.size.width {
+                let cell = self.cell_mut(buffer, Vector2::new(x, y));
 
                 if y == 0 {
                     if x == 0 {
-                        terminal.buffer[buffer_index].character = '┌';
-                        terminal.buffer[buffer_index].foreground_color = self.border_color;
-                    } else if x == self.width - 1 {
-                        terminal.buffer[buffer_index].character = '┐';
-                        terminal.buffer[buffer_index].foreground_color = self.border_color;
+                        cell.character = '┌';
+                        cell.foreground_color = self.border_color;
+                    } else if x == self.size.width - 1 {
+                        cell.character = '┐';
+                        cell.foreground_color = self.border_color;
                     } else {
-                        terminal.buffer[buffer_index].character = '─';
-                        terminal.buffer[buffer_index].foreground_color = self.border_color;
+                        cell.character = '─';
+                        cell.foreground_color = self.border_color;
                     }
-                } else if y == self.height - 1 {
+                } else if y == self.size.height - 1 {
                     if x == 0 {
-                        terminal.buffer[buffer_index].character = '└';
-                        terminal.buffer[buffer_index].foreground_color = self.border_color;
-                    } else if x == self.width - 1 {
-                        terminal.buffer[buffer_index].character = '┘';
-                        terminal.buffer[buffer_index].foreground_color = self.border_color;
+                        cell.character = '└';
+                        cell.foreground_color = self.border_color;
+                    } else if x == self.size.width - 1 {
+                        cell.character = '┘';
+                        cell.foreground_color = self.border_color;
                     } else {
-                        terminal.buffer[buffer_index].character = '─';
-                        terminal.buffer[buffer_index].foreground_color = self.border_color;
+                        cell.character = '─';
+                        cell.foreground_color = self.border_color;
                     }
-                } else if x == 0 || x == self.width - 1 {
-                    terminal.buffer[buffer_index].character = '│';
-                    terminal.buffer[buffer_index].foreground_color = self.border_color;
+                } else if x == 0 || x == self.size.width - 1 {
+                    cell.character = '│';
+                    cell.foreground_color = self.border_color;
                 } else {
                     continue;
                 }
             }
         }
 
+        // Render the title
         if let Some(title) = &self.title {
             for (x, c) in title.chars().enumerate() {
-                let buffer_index = self.position_to_buffer_index(terminal, x + 2, 0);
-                terminal.buffer[buffer_index].character = c
+                let cell = self.cell_mut(buffer, Vector2::new(x + 2, 0));
+                cell.character = c
             }
         }
     }
 
-    fn height(&self) -> usize {
-        self.height
-    }
-
-    fn width(&self) -> usize {
-        self.width
+    /// The inner size of the rendering area, discards the border
+    pub fn inner_size(&self) -> Size {
+        Size {
+            width: self.size.width - 2,
+            height: self.size.height - 2,
+        }
     }
 
     fn set_border_color(&mut self, color: Color) {
         self.border_color = color
     }
 
-    fn set_title(&mut self, title: Option<String>) {
+    pub fn set_title(&mut self, title: Option<String>) {
         self.title = title;
     }
 }
@@ -385,15 +430,17 @@ pub struct Text {
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
     rendering_region: RenderingRegion,
-    lines_count: usize,
+    y_offset: usize,
 }
 
+#[derive(Clone, Copy)]
 pub enum HorizontalAlignment {
     Left,
     Right,
     Center,
 }
 
+#[derive(Clone, Copy)]
 pub enum VerticalAlignment {
     Top,
     Bottom,
@@ -408,16 +455,29 @@ impl Text {
         rendering_region: RenderingRegion,
     ) -> Text {
         let text: Vec<char> = text.chars().collect();
-        let lines_count = HardwrappingText::new(&text, rendering_region.width() - 2)
-            .into_iter()
-            .count();
+
+        let y_offset = Text::calculate_y_offset(&text, rendering_region.size, vertical_alignment);
 
         Text {
             text,
             vertical_alignment,
             horizontal_alignment,
             rendering_region,
-            lines_count,
+            y_offset,
+        }
+    }
+
+    fn calculate_y_offset(
+        text: &[char],
+        size: Size,
+        vertical_alignment: VerticalAlignment,
+    ) -> usize {
+        let lines_count = HardwrappingText::new(text, size.width).into_iter().count();
+
+        match vertical_alignment {
+            VerticalAlignment::Top => 1, // 1 for the border
+            VerticalAlignment::Bottom => size.height - 1 - 1 - lines_count, // -1 for the border
+            VerticalAlignment::Center => (size.height - lines_count) / 2,
         }
     }
 
@@ -428,54 +488,53 @@ impl Text {
             self.text.clear();
         }
 
-        self.lines_count = HardwrappingText::new(&self.text, self.rendering_region.width() - 2)
-            .into_iter()
-            .count();
+        self.y_offset = Text::calculate_y_offset(
+            &self.text,
+            self.rendering_region.size,
+            self.vertical_alignment,
+        );
     }
 }
 impl Widget for Text {
-    fn render(&self, terminal: &mut Terminal) {
-        self.rendering_region.render(terminal);
+    fn rendering_region(self) -> RenderingRegion {
+        self.rendering_region
+    }
 
-        let y = match self.vertical_alignment {
-            VerticalAlignment::Top => 1, // 1 for the border
-            VerticalAlignment::Bottom => self.height() - 1 - 1 - self.lines_count, // -1 for the border
-            VerticalAlignment::Center => (self.height() - self.lines_count) / 2,
-        };
+    fn render(&self, buffer: &mut Buffer) {
+        self.rendering_region.render(buffer);
 
-        let hardwrapped_lines = HardwrappingText::new(&self.text, self.width() - 2);
-        for (line_index, line) in hardwrapped_lines
-            .into_iter()
-            // FIXME: Deal with scrolling
-            .take(self.height() - 2)
-            .enumerate()
+        for (line_index, line) in
+            HardwrappingText::new(&self.text, self.rendering_region.inner_size().width)
+                .into_iter()
+                // FIXME: Deal with scrolling
+                .take(self.rendering_region.inner_size().height)
+                .enumerate()
         {
-            let x = match self.horizontal_alignment {
+            let x_offset = match self.horizontal_alignment {
                 HorizontalAlignment::Left => 1, // 1 for the border
                 HorizontalAlignment::Right => {
-                    self.width() - line.len() - 1 // -1 for the border
+                    self.rendering_region.size.width - line.len() - 1 // -1 for the border
                 }
-                HorizontalAlignment::Center => (self.width() - line.len()) / 2,
+                HorizontalAlignment::Center => (self.rendering_region.size.width - line.len()) / 2,
             };
 
             for (row_index, c) in line.iter().enumerate() {
-                let buffer_index = self.rendering_region.position_to_buffer_index(
-                    terminal,
-                    x + row_index,
-                    y + line_index,
+                let cell = self.rendering_region.cell_mut(
+                    buffer,
+                    Vector2::new(row_index, line_index) + Vector2::new(x_offset, self.y_offset),
                 );
 
-                terminal.buffer[buffer_index].character = *c;
+                cell.character = *c;
             }
         }
     }
 
-    fn height(&self) -> usize {
-        self.rendering_region.height
+    fn size(&self) -> Size {
+        self.rendering_region.size
     }
 
-    fn width(&self) -> usize {
-        self.rendering_region.width
+    fn inner_size(&self) -> Size {
+        self.rendering_region.inner_size()
     }
 
     fn set_border_color(&mut self, color: Color) {
@@ -489,10 +548,9 @@ impl Widget for Text {
 
 pub struct ItemList {
     items: Vec<String>,
-    vertical_alignment: VerticalAlignment,
-    horizontal_alignment: HorizontalAlignment,
     rendering_region: RenderingRegion,
     selected_row: Option<usize>,
+    offset: Vector2,
 }
 
 impl ItemList {
@@ -502,15 +560,41 @@ impl ItemList {
         horizontal_alignment: HorizontalAlignment,
         rendering_region: RenderingRegion,
     ) -> ItemList {
-        assert!(items.len() <= rendering_region.height - 2); // -2 for the border
-        assert!(items.iter().map(|item| item.len()).max() < Some(rendering_region.width - 2)); // -2 for the border
+        let inner_size = rendering_region.inner_size();
+
+        assert!(items.len() <= inner_size.height);
+        assert!(items.iter().map(|item| item.len()).max() < Some(inner_size.width));
+
+        let offset = {
+            let y_offset = match vertical_alignment {
+                VerticalAlignment::Top => 1, // 1 for the border
+                VerticalAlignment::Bottom => rendering_region.size.height - items.len() - 1, // -1 for the border
+                VerticalAlignment::Center => (rendering_region.size.height - items.len()) / 2,
+            };
+
+            let x_offset = match horizontal_alignment {
+                HorizontalAlignment::Left => 1, // 1 for the border
+                HorizontalAlignment::Right => {
+                    rendering_region.size.width
+                        - items.iter().map(|item| item.len()).max().unwrap_or(0)
+                        - 1
+                    // -1 for the border
+                }
+                HorizontalAlignment::Center => {
+                    (rendering_region.size.width
+                        - items.iter().map(|item| item.len()).max().unwrap_or(0))
+                        / 2
+                }
+            };
+
+            Vector2::new(x_offset, y_offset)
+        };
 
         ItemList {
             items,
-            vertical_alignment,
-            horizontal_alignment,
             rendering_region,
             selected_row: None,
+            offset,
         }
     }
 
@@ -520,57 +604,40 @@ impl ItemList {
 }
 
 impl Widget for ItemList {
-    fn render(&self, terminal: &mut Terminal) {
-        self.rendering_region.render(terminal);
+    fn rendering_region(self) -> RenderingRegion {
+        self.rendering_region
+    }
+
+    fn render(&self, buffer: &mut Buffer) {
+        self.rendering_region.render(buffer);
 
         // Fast path, there is nothing to render
         if self.items.is_empty() {
             return;
         }
 
-        let y_offset = match self.vertical_alignment {
-            VerticalAlignment::Top => 1, // 1 for the border
-            VerticalAlignment::Bottom => self.rendering_region.height - self.items.len() - 1, // -1 for the border
-            VerticalAlignment::Center => (self.rendering_region.height - self.items.len()) / 2,
-        };
-
-        let x_offset = match self.horizontal_alignment {
-            HorizontalAlignment::Left => 1, // 1 for the border
-            HorizontalAlignment::Right => {
-                self.rendering_region.width
-                    - self.items.iter().map(|item| item.len()).max().unwrap_or(0)
-                    - 1
-                // -1 for the border
-            }
-            HorizontalAlignment::Center => {
-                (self.rendering_region.width
-                    - self.items.iter().map(|item| item.len()).max().unwrap_or(0))
-                    / 2
-            }
-        };
-
         if let Some(selected_row) = self.selected_row {
-            highlight_row(&self.rendering_region, terminal, y_offset, selected_row)
+            self.rendering_region
+                .highlight_row(buffer, self.offset.y + selected_row)
         }
 
         for (y, item) in self.items.iter().enumerate() {
             for (x, c) in item.chars().enumerate() {
-                let buffer_index = self.rendering_region.position_to_buffer_index(
-                    terminal,
-                    x_offset + x,
-                    y_offset + y,
-                );
-                terminal.buffer[buffer_index].character = c;
+                let cell = self
+                    .rendering_region
+                    .cell_mut(buffer, Vector2::new(x, y) + self.offset);
+
+                cell.character = c;
             }
         }
     }
 
-    fn height(&self) -> usize {
-        self.rendering_region.height
+    fn size(&self) -> Size {
+        self.rendering_region.size
     }
 
-    fn width(&self) -> usize {
-        self.rendering_region.width
+    fn inner_size(&self) -> Size {
+        self.rendering_region.inner_size()
     }
 
     fn set_border_color(&mut self, color: Color) {
@@ -584,11 +651,10 @@ impl Widget for ItemList {
 
 pub struct Table {
     items: Vec<Vec<String>>,
-    vertical_alignment: VerticalAlignment,
-    horizontal_alignment: HorizontalAlignment,
     rendering_region: RenderingRegion,
     column_lengths: Vec<usize>,
     selected_row: Option<usize>,
+    offset: Vector2,
 }
 
 impl Table {
@@ -611,16 +677,44 @@ impl Table {
 
         let required_width: usize = column_lengths.iter().sum();
 
-        assert!((items.len()) <= rendering_region.height - 2); // -2 for the border
-        assert!(required_width < rendering_region.width - 2); // -2 for the border
+        let inner_size = rendering_region.inner_size();
+        assert!((items.len()) <= inner_size.height);
+        assert!(required_width < inner_size.width);
+
+        let offset = {
+            let y_offset = match vertical_alignment {
+                VerticalAlignment::Top => 1, // 1 for the border
+                VerticalAlignment::Bottom => rendering_region.size.height - items.len() - 1, // -1 for the border
+                VerticalAlignment::Center => (rendering_region.size.height - items.len()) / 2,
+            };
+
+            let x_offset = match horizontal_alignment {
+                HorizontalAlignment::Left => 1, // 1 for the border
+                HorizontalAlignment::Right => {
+                    // -1 for the border
+                    rendering_region.size.width
+                    - column_lengths.iter().sum::<usize>()
+                    - 1
+                    // For the spacing between columns
+                    - column_lengths.len() - 1
+                }
+                HorizontalAlignment::Center => {
+                    (rendering_region.size.width
+                    - column_lengths.iter().sum::<usize>()
+                    // For the spacing between columns
+                    - column_lengths.len()
+                    - 1) / 2
+                }
+            };
+            Vector2::new(x_offset, y_offset)
+        };
 
         Table {
             items,
-            vertical_alignment,
-            horizontal_alignment,
             rendering_region,
             column_lengths,
             selected_row: None,
+            offset,
         }
     }
 
@@ -630,68 +724,47 @@ impl Table {
 }
 
 impl Widget for Table {
-    fn render(&self, terminal: &mut Terminal) {
-        self.rendering_region.render(terminal);
+    fn rendering_region(self) -> RenderingRegion {
+        self.rendering_region
+    }
+
+    fn render(&self, buffer: &mut Buffer) {
+        self.rendering_region.render(buffer);
 
         // Fast path, there is nothing to render
         if self.items.is_empty() {
             return;
         }
 
-        let y_offset = match self.vertical_alignment {
-            VerticalAlignment::Top => 1, // 1 for the border
-            VerticalAlignment::Bottom => self.rendering_region.height - self.items.len() - 1, // -1 for the border
-            VerticalAlignment::Center => (self.rendering_region.height - self.items.len()) / 2,
-        };
-
-        let x_offset = match self.horizontal_alignment {
-            HorizontalAlignment::Left => 1, // 1 for the border
-            HorizontalAlignment::Right => {
-                // -1 for the border
-                self.rendering_region.width
-                    - self.column_lengths.iter().sum::<usize>()
-                    - 1
-                    // For the spacing between columns
-                    - self.column_lengths.len() - 1
-            }
-            HorizontalAlignment::Center => {
-                (self.rendering_region.width
-                    - self.column_lengths.iter().sum::<usize>()
-                    // For the spacing between columns
-                    - self.column_lengths.len()
-                    - 1)
-                    / 2
-            }
-        };
-
         if let Some(selected_row) = self.selected_row {
-            highlight_row(&self.rendering_region, terminal, y_offset, selected_row)
+            self.rendering_region
+                .highlight_row(buffer, self.offset.y + selected_row)
         }
 
         for (row_index, row) in self.items.iter().enumerate() {
             for (column_index, item) in row.iter().enumerate() {
+                let column_offset = self.column_lengths.iter().take(column_index).sum::<usize>();
+
                 for (k, c) in item.chars().enumerate() {
                     // We sum the 'column_index' in the end to add gaps
-                    let x =
-                        self.column_lengths.iter().take(column_index).sum::<usize>() + column_index;
+                    let x = column_offset + column_index;
 
-                    let buffer_index = self.rendering_region.position_to_buffer_index(
-                        terminal,
-                        x_offset + x + k,
-                        y_offset + row_index,
-                    );
-                    terminal.buffer[buffer_index].character = c;
+                    let cell = self
+                        .rendering_region
+                        .cell_mut(buffer, Vector2::new(x + k, row_index) + self.offset);
+
+                    cell.character = c;
                 }
             }
         }
     }
 
-    fn height(&self) -> usize {
-        self.rendering_region.height
+    fn size(&self) -> Size {
+        self.rendering_region.size
     }
 
-    fn width(&self) -> usize {
-        self.rendering_region.width
+    fn inner_size(&self) -> Size {
+        self.rendering_region.inner_size()
     }
 
     fn set_border_color(&mut self, color: Color) {
@@ -704,7 +777,7 @@ impl Widget for Table {
 }
 
 #[derive(Copy, Clone)]
-struct Cell {
+pub struct Cell {
     character: char,
     foreground_color: Color,
     background_color: Color,
@@ -791,18 +864,4 @@ impl<'a> Iterator for HardwrappingText<'a> {
     }
 }
 
-fn highlight_row(
-    rending_region: &RenderingRegion,
-    terminal: &mut Terminal,
-    y_offset: usize,
-    selected_row: usize,
-) {
-    for column in 1..rending_region.width() - 1 {
-        let buffer_index =
-            rending_region.position_to_buffer_index(terminal, column, y_offset + selected_row);
-
-        terminal.buffer[buffer_index].background_color = Color::Cyan;
-        terminal.buffer[buffer_index].foreground_color = Color::Black;
-    }
-}
 // TODO: Add tests with expectations
