@@ -675,11 +675,13 @@ impl Table {
             }
         }
 
-        let required_width: usize = column_lengths.iter().sum();
+        let max_width = usize::max(
+            column_lengths.iter().sum::<usize>() + column_lengths.len(),
+            rendering_region.inner_size().width,
+        );
 
         let inner_size = rendering_region.inner_size();
         assert!((items.len()) <= inner_size.height);
-        assert!(required_width < inner_size.width);
 
         let offset = {
             let y_offset = match vertical_alignment {
@@ -692,20 +694,11 @@ impl Table {
                 HorizontalAlignment::Left => 1, // 1 for the border
                 HorizontalAlignment::Right => {
                     // -1 for the border
-                    rendering_region.size.width
-                    - column_lengths.iter().sum::<usize>()
-                    - 1
-                    // For the spacing between columns
-                    - column_lengths.len() - 1
+                    rendering_region.size.width - max_width - 1
                 }
-                HorizontalAlignment::Center => {
-                    (rendering_region.size.width
-                    - column_lengths.iter().sum::<usize>()
-                    // For the spacing between columns
-                    - column_lengths.len()
-                    - 1) / 2
-                }
+                HorizontalAlignment::Center => (rendering_region.size.width - max_width) / 2,
             };
+
             Vector2::new(x_offset, y_offset)
         };
 
@@ -742,16 +735,21 @@ impl Widget for Table {
         }
 
         for (row_index, row) in self.items.iter().enumerate() {
-            for (column_index, item) in row.iter().enumerate() {
+            'line: for (column_index, item) in row.iter().enumerate() {
                 let column_offset = self.column_lengths.iter().take(column_index).sum::<usize>();
 
                 for (k, c) in item.chars().enumerate() {
                     // We sum the 'column_index' in the end to add gaps
-                    let x = column_offset + column_index;
+                    let x = column_offset + column_index + k;
+
+                    // This truncates the line to avoid leaving the rendering area
+                    if x >= self.inner_size().width {
+                        break 'line;
+                    }
 
                     let cell = self
                         .rendering_region
-                        .cell_mut(buffer, Vector2::new(x + k, row_index) + self.offset);
+                        .cell_mut(buffer, Vector2::new(x, row_index) + self.offset);
 
                     cell.character = c;
                 }
