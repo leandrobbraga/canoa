@@ -50,7 +50,13 @@ impl App {
         let issues_table: Vec<Vec<String>> = issues
             .iter()
             .take(botton.inner_size().height)
-            .map(|issue| vec![issue.name.clone(), issue.fields.status.clone()])
+            .map(|issue| {
+                vec![
+                    issue.name.clone(),
+                    issue.fields.status.clone(),
+                    issue.fields.summary.clone(),
+                ]
+            })
             .collect();
 
         botton.set_title(Some("[ Issues ]".into()));
