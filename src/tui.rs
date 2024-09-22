@@ -402,7 +402,13 @@ impl RenderingRegion {
         // Render the title
         if let Some(title) = &self.title {
             for (x, c) in title.chars().enumerate() {
-                let cell = self.cell_mut(buffer, Vector2::new(x + 2, 0));
+                let position = Vector2::new(x + 2, 0);
+
+                if position.x >= self.inner_size().width - 1 {
+                    break;
+                }
+
+                let cell = self.cell_mut(buffer, position);
                 cell.character = c
             }
         }

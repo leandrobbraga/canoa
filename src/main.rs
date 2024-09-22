@@ -54,6 +54,8 @@ impl App {
                 vec![
                     issue.name.clone(),
                     issue.fields.status.clone(),
+                    issue.fields.kind.clone(),
+                    format_assignee(issue.fields.assignee.clone()),
                     issue.fields.summary.clone(),
                 ]
             })
@@ -68,12 +70,12 @@ impl App {
         issues_tui.set_border_color(Color::Green);
         issues_tui.set_selected(Some(0));
 
-        right.set_title(Some(format!("[ {} ]", issues[0].name)));
         let description = issues[0]
             .fields
             .description
             .clone()
             .unwrap_or("This place will contain the selected issue details.".into());
+        right.set_title(Some("[ Description ]".into()));
         let issue_details_tui = right.text(
             description,
             tui::VerticalAlignment::Top,
@@ -123,10 +125,6 @@ impl App {
         self.tui
             .issue_details
             .change_text(self.issues[self.active_issue].fields.description.clone());
-        self.tui.issue_details.set_title(Some(format!(
-            "[ {} ]",
-            self.issues[self.active_issue].name.clone()
-        )));
     }
 
     fn input(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
@@ -174,3 +172,17 @@ fn main() {
         };
     }
 }
+
+fn format_assignee(assignee: Option<String>) -> String {
+    if let Some(assignee) = assignee {
+        return assignee
+            .split(" ")
+            .flat_map(|s| s.chars().nth(0))
+            .take(3)
+            .collect();
+    }
+
+    String::new()
+}
+
+// TODO: Add color to the issue status
