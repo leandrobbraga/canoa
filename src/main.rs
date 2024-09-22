@@ -34,8 +34,8 @@ impl App {
 
         let tui = tui::Terminal::try_new().unwrap();
 
-        let area = tui.area();
-        let (left, mut right) = area.split_horizontally_at(0.2);
+        let rendering_region = tui.rendering_region();
+        let (left, mut right) = rendering_region.split_horizontally_at(0.2);
         let (mut top, mut botton) = left.split_vertically();
 
         top.set_title(Some("[ Sprints ]".into()));
@@ -53,7 +53,6 @@ impl App {
             .map(|issue| vec![issue.name.clone(), issue.fields.status.clone()])
             .collect();
 
-        // TODO: Include more informatio about the issue such as who is assigned to the task
         botton.set_title(Some("[ Issues ]".into()));
         let mut issues_tui = botton.table(
             issues_table,

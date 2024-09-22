@@ -132,8 +132,8 @@ impl Terminal {
         self.buffer.fill(Cell::default())
     }
 
-    pub fn area(&self) -> Rectangle {
-        Rectangle::new(None, 0, 0, self.width, self.height)
+    pub fn rendering_region(&self) -> RenderingRegion {
+        RenderingRegion::new(None, 0, 0, self.width, self.height)
     }
 
     fn size() -> std::io::Result<(usize, usize)> {
@@ -180,7 +180,7 @@ impl Terminal {
     }
 }
 
-pub struct Rectangle {
+pub struct RenderingRegion {
     title: Option<String>,
     x: usize,
     y: usize,
@@ -189,9 +189,15 @@ pub struct Rectangle {
     border_color: Color,
 }
 
-impl Rectangle {
-    fn new(title: Option<String>, x: usize, y: usize, width: usize, height: usize) -> Rectangle {
-        Rectangle {
+impl RenderingRegion {
+    fn new(
+        title: Option<String>,
+        x: usize,
+        y: usize,
+        width: usize,
+        height: usize,
+    ) -> RenderingRegion {
+        RenderingRegion {
             title,
             x,
             y,
@@ -201,7 +207,7 @@ impl Rectangle {
         }
     }
 
-    pub fn split_horizontally(self) -> (Rectangle, Rectangle) {
+    pub fn split_horizontally(self) -> (RenderingRegion, RenderingRegion) {
         self.split_horizontally_at(0.5)
     }
 
@@ -212,13 +218,13 @@ impl Rectangle {
     /// |     ||     |
     /// |     ||     |
     /// +-----++-----+
-    pub fn split_horizontally_at(self, percentage: f32) -> (Rectangle, Rectangle) {
+    pub fn split_horizontally_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
         let left_width = (self.width as f32 * percentage) as usize;
         let right_width = self.width - left_width;
 
-        let left = Rectangle {
+        let left = RenderingRegion {
             title: None,
             x: self.x,
             y: self.y,
@@ -226,7 +232,7 @@ impl Rectangle {
             height: self.height,
             border_color: self.border_color,
         };
-        let right = Rectangle {
+        let right = RenderingRegion {
             title: None,
             x: self.x + left_width,
             y: self.y,
@@ -238,7 +244,7 @@ impl Rectangle {
         (left, right)
     }
 
-    pub fn split_vertically(self) -> (Rectangle, Rectangle) {
+    pub fn split_vertically(self) -> (RenderingRegion, RenderingRegion) {
         self.split_vertically_at(0.5)
     }
 
@@ -249,13 +255,13 @@ impl Rectangle {
     /// +------------+
     /// |            |
     /// +------------+
-    pub fn split_vertically_at(self, percentage: f32) -> (Rectangle, Rectangle) {
+    pub fn split_vertically_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
         let top_height = (self.height as f32 * percentage) as usize;
         let bottom_height = self.height - top_height;
 
-        let top = Rectangle {
+        let top = RenderingRegion {
             title: None,
             x: self.x,
             y: self.y,
@@ -263,7 +269,7 @@ impl Rectangle {
             height: top_height,
             border_color: self.border_color,
         };
-        let bottom = Rectangle {
+        let bottom = RenderingRegion {
             title: None,
             x: self.x,
             y: self.y + top_height,
@@ -311,7 +317,7 @@ impl Rectangle {
     }
 }
 
-impl Widget for Rectangle {
+impl Widget for RenderingRegion {
     fn render(&self, terminal: &mut Terminal) {
         // We iterate in this order to help with cache locality
         for y in 0..self.height {
@@ -378,7 +384,7 @@ pub struct Text {
     text: Vec<char>,
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
-    area: Rectangle,
+    rendering_region: RenderingRegion,
     lines_count: usize,
 }
 
@@ -399,10 +405,10 @@ impl Text {
         text: String,
         vertical_alignment: VerticalAlignment,
         horizontal_alignment: HorizontalAlignment,
-        area: Rectangle,
+        rendering_region: RenderingRegion,
     ) -> Text {
         let text: Vec<char> = text.chars().collect();
-        let lines_count = HardwrappingText::new(&text, area.width() - 2)
+        let lines_count = HardwrappingText::new(&text, rendering_region.width() - 2)
             .into_iter()
             .count();
 
@@ -410,7 +416,7 @@ impl Text {
             text,
             vertical_alignment,
             horizontal_alignment,
-            area,
+            rendering_region,
             lines_count,
         }
     }
@@ -422,14 +428,14 @@ impl Text {
             self.text.clear();
         }
 
-        self.lines_count = HardwrappingText::new(&self.text, self.area.width() - 2)
+        self.lines_count = HardwrappingText::new(&self.text, self.rendering_region.width() - 2)
             .into_iter()
             .count();
     }
 }
 impl Widget for Text {
     fn render(&self, terminal: &mut Terminal) {
-        self.area.render(terminal);
+        self.rendering_region.render(terminal);
 
         let y = match self.vertical_alignment {
             VerticalAlignment::Top => 1, // 1 for the border
@@ -453,9 +459,11 @@ impl Widget for Text {
             };
 
             for (row_index, c) in line.iter().enumerate() {
-                let buffer_index =
-                    self.area
-                        .position_to_buffer_index(terminal, x + row_index, y + line_index);
+                let buffer_index = self.rendering_region.position_to_buffer_index(
+                    terminal,
+                    x + row_index,
+                    y + line_index,
+                );
 
                 terminal.buffer[buffer_index].character = *c;
             }
@@ -463,19 +471,19 @@ impl Widget for Text {
     }
 
     fn height(&self) -> usize {
-        self.area.height
+        self.rendering_region.height
     }
 
     fn width(&self) -> usize {
-        self.area.width
+        self.rendering_region.width
     }
 
     fn set_border_color(&mut self, color: Color) {
-        self.area.set_border_color(color)
+        self.rendering_region.set_border_color(color)
     }
 
     fn set_title(&mut self, title: Option<String>) {
-        self.area.set_title(title);
+        self.rendering_region.set_title(title);
     }
 }
 
@@ -483,7 +491,7 @@ pub struct ItemList {
     items: Vec<String>,
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
-    area: Rectangle,
+    rendering_region: RenderingRegion,
     selected_row: Option<usize>,
 }
 
@@ -492,16 +500,16 @@ impl ItemList {
         items: Vec<String>,
         vertical_alignment: VerticalAlignment,
         horizontal_alignment: HorizontalAlignment,
-        area: Rectangle,
+        rendering_region: RenderingRegion,
     ) -> ItemList {
-        assert!(items.len() <= area.height - 2); // -2 for the border
-        assert!(items.iter().map(|item| item.len()).max() < Some(area.width - 2)); // -2 for the border
+        assert!(items.len() <= rendering_region.height - 2); // -2 for the border
+        assert!(items.iter().map(|item| item.len()).max() < Some(rendering_region.width - 2)); // -2 for the border
 
         ItemList {
             items,
             vertical_alignment,
             horizontal_alignment,
-            area,
+            rendering_region,
             selected_row: None,
         }
     }
@@ -513,7 +521,7 @@ impl ItemList {
 
 impl Widget for ItemList {
     fn render(&self, terminal: &mut Terminal) {
-        self.area.render(terminal);
+        self.rendering_region.render(terminal);
 
         // Fast path, there is nothing to render
         if self.items.is_empty() {
@@ -522,49 +530,55 @@ impl Widget for ItemList {
 
         let y_offset = match self.vertical_alignment {
             VerticalAlignment::Top => 1, // 1 for the border
-            VerticalAlignment::Bottom => self.area.height - self.items.len() - 1, // -1 for the border
-            VerticalAlignment::Center => (self.area.height - self.items.len()) / 2,
+            VerticalAlignment::Bottom => self.rendering_region.height - self.items.len() - 1, // -1 for the border
+            VerticalAlignment::Center => (self.rendering_region.height - self.items.len()) / 2,
         };
 
         let x_offset = match self.horizontal_alignment {
             HorizontalAlignment::Left => 1, // 1 for the border
             HorizontalAlignment::Right => {
-                self.area.width - self.items.iter().map(|item| item.len()).max().unwrap_or(0) - 1
+                self.rendering_region.width
+                    - self.items.iter().map(|item| item.len()).max().unwrap_or(0)
+                    - 1
                 // -1 for the border
             }
             HorizontalAlignment::Center => {
-                (self.area.width - self.items.iter().map(|item| item.len()).max().unwrap_or(0)) / 2
+                (self.rendering_region.width
+                    - self.items.iter().map(|item| item.len()).max().unwrap_or(0))
+                    / 2
             }
         };
 
         if let Some(selected_row) = self.selected_row {
-            highlight_row(&self.area, terminal, y_offset, selected_row)
+            highlight_row(&self.rendering_region, terminal, y_offset, selected_row)
         }
 
         for (y, item) in self.items.iter().enumerate() {
             for (x, c) in item.chars().enumerate() {
-                let buffer_index =
-                    self.area
-                        .position_to_buffer_index(terminal, x_offset + x, y_offset + y);
+                let buffer_index = self.rendering_region.position_to_buffer_index(
+                    terminal,
+                    x_offset + x,
+                    y_offset + y,
+                );
                 terminal.buffer[buffer_index].character = c;
             }
         }
     }
 
     fn height(&self) -> usize {
-        self.area.height
+        self.rendering_region.height
     }
 
     fn width(&self) -> usize {
-        self.area.width
+        self.rendering_region.width
     }
 
     fn set_border_color(&mut self, color: Color) {
-        self.area.set_border_color(color)
+        self.rendering_region.set_border_color(color)
     }
 
     fn set_title(&mut self, title: Option<String>) {
-        self.area.set_title(title);
+        self.rendering_region.set_title(title);
     }
 }
 
@@ -572,7 +586,7 @@ pub struct Table {
     items: Vec<Vec<String>>,
     vertical_alignment: VerticalAlignment,
     horizontal_alignment: HorizontalAlignment,
-    area: Rectangle,
+    rendering_region: RenderingRegion,
     column_lengths: Vec<usize>,
     selected_row: Option<usize>,
 }
@@ -582,7 +596,7 @@ impl Table {
         items: Vec<Vec<String>>,
         vertical_alignment: VerticalAlignment,
         horizontal_alignment: HorizontalAlignment,
-        area: Rectangle,
+        rendering_region: RenderingRegion,
     ) -> Table {
         let max_row_size = items.iter().map(|row| row.len()).max().unwrap();
 
@@ -597,14 +611,14 @@ impl Table {
 
         let required_width: usize = column_lengths.iter().sum();
 
-        assert!((items.len()) <= area.height - 2); // -2 for the border
-        assert!(required_width < area.width - 2); // -2 for the border
+        assert!((items.len()) <= rendering_region.height - 2); // -2 for the border
+        assert!(required_width < rendering_region.width - 2); // -2 for the border
 
         Table {
             items,
             vertical_alignment,
             horizontal_alignment,
-            area,
+            rendering_region,
             column_lengths,
             selected_row: None,
         }
@@ -617,7 +631,7 @@ impl Table {
 
 impl Widget for Table {
     fn render(&self, terminal: &mut Terminal) {
-        self.area.render(terminal);
+        self.rendering_region.render(terminal);
 
         // Fast path, there is nothing to render
         if self.items.is_empty() {
@@ -626,22 +640,22 @@ impl Widget for Table {
 
         let y_offset = match self.vertical_alignment {
             VerticalAlignment::Top => 1, // 1 for the border
-            VerticalAlignment::Bottom => self.area.height - self.items.len() - 1, // -1 for the border
-            VerticalAlignment::Center => (self.area.height - self.items.len()) / 2,
+            VerticalAlignment::Bottom => self.rendering_region.height - self.items.len() - 1, // -1 for the border
+            VerticalAlignment::Center => (self.rendering_region.height - self.items.len()) / 2,
         };
 
         let x_offset = match self.horizontal_alignment {
             HorizontalAlignment::Left => 1, // 1 for the border
             HorizontalAlignment::Right => {
                 // -1 for the border
-                self.area.width
+                self.rendering_region.width
                     - self.column_lengths.iter().sum::<usize>()
                     - 1
                     // For the spacing between columns
                     - self.column_lengths.len() - 1
             }
             HorizontalAlignment::Center => {
-                (self.area.width
+                (self.rendering_region.width
                     - self.column_lengths.iter().sum::<usize>()
                     // For the spacing between columns
                     - self.column_lengths.len()
@@ -651,7 +665,7 @@ impl Widget for Table {
         };
 
         if let Some(selected_row) = self.selected_row {
-            highlight_row(&self.area, terminal, y_offset, selected_row)
+            highlight_row(&self.rendering_region, terminal, y_offset, selected_row)
         }
 
         for (row_index, row) in self.items.iter().enumerate() {
@@ -661,7 +675,7 @@ impl Widget for Table {
                     let x =
                         self.column_lengths.iter().take(column_index).sum::<usize>() + column_index;
 
-                    let buffer_index = self.area.position_to_buffer_index(
+                    let buffer_index = self.rendering_region.position_to_buffer_index(
                         terminal,
                         x_offset + x + k,
                         y_offset + row_index,
@@ -673,19 +687,19 @@ impl Widget for Table {
     }
 
     fn height(&self) -> usize {
-        self.area.height
+        self.rendering_region.height
     }
 
     fn width(&self) -> usize {
-        self.area.width
+        self.rendering_region.width
     }
 
     fn set_border_color(&mut self, color: Color) {
-        self.area.set_border_color(color)
+        self.rendering_region.set_border_color(color)
     }
 
     fn set_title(&mut self, title: Option<String>) {
-        self.area.set_title(title);
+        self.rendering_region.set_title(title);
     }
 }
 
@@ -777,9 +791,15 @@ impl<'a> Iterator for HardwrappingText<'a> {
     }
 }
 
-fn highlight_row(area: &Rectangle, terminal: &mut Terminal, y_offset: usize, selected_row: usize) {
-    for column in 1..area.width() - 1 {
-        let buffer_index = area.position_to_buffer_index(terminal, column, y_offset + selected_row);
+fn highlight_row(
+    rending_region: &RenderingRegion,
+    terminal: &mut Terminal,
+    y_offset: usize,
+    selected_row: usize,
+) {
+    for column in 1..rending_region.width() - 1 {
+        let buffer_index =
+            rending_region.position_to_buffer_index(terminal, column, y_offset + selected_row);
 
         terminal.buffer[buffer_index].background_color = Color::Cyan;
         terminal.buffer[buffer_index].foreground_color = Color::Black;
