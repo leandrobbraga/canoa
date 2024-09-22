@@ -538,14 +538,7 @@ impl Widget for ItemList {
         };
 
         if let Some(selected_row) = self.selected_row {
-            for i in 1..self.width() - 1 {
-                let buffer_index =
-                    self.area
-                        .position_to_buffer_index(terminal, i, y_offset + selected_row);
-
-                terminal.buffer[buffer_index].background_color = Color::Cyan;
-                terminal.buffer[buffer_index].foreground_color = Color::Black;
-            }
+            highlight_row(&self.area, terminal, y_offset, selected_row)
         }
 
         for (y, item) in self.items.iter().enumerate() {
@@ -658,14 +651,7 @@ impl Widget for Table {
         };
 
         if let Some(selected_row) = self.selected_row {
-            for i in 1..self.width() - 1 {
-                let buffer_index =
-                    self.area
-                        .position_to_buffer_index(terminal, i, y_offset + selected_row);
-
-                terminal.buffer[buffer_index].background_color = Color::Cyan;
-                terminal.buffer[buffer_index].foreground_color = Color::Black;
-            }
+            highlight_row(&self.area, terminal, y_offset, selected_row)
         }
 
         for (row_index, row) in self.items.iter().enumerate() {
@@ -791,4 +777,12 @@ impl<'a> Iterator for HardwrappingText<'a> {
     }
 }
 
+fn highlight_row(area: &Rectangle, terminal: &mut Terminal, y_offset: usize, selected_row: usize) {
+    for column in 1..area.width() - 1 {
+        let buffer_index = area.position_to_buffer_index(terminal, column, y_offset + selected_row);
+
+        terminal.buffer[buffer_index].background_color = Color::Cyan;
+        terminal.buffer[buffer_index].foreground_color = Color::Black;
+    }
+}
 // TODO: Add tests with expectations
