@@ -291,11 +291,11 @@ impl RenderingRegion {
     /// +------------+
     /// |            |
     /// +------------+
-    pub fn split_hotizontally_(self) -> (RenderingRegion, RenderingRegion) {
-        self.split_hotizontally_at_(0.5)
+    pub fn split_hotizontally(self) -> (RenderingRegion, RenderingRegion) {
+        self.split_hotizontally_at(0.5)
     }
 
-    pub fn split_hotizontally_at_(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
+    pub fn split_hotizontally_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
         let top_height = (self.size.height as f32 * percentage) as usize;
