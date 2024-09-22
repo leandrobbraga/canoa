@@ -207,18 +207,18 @@ impl RenderingRegion {
         }
     }
 
-    pub fn split_horizontally(self) -> (RenderingRegion, RenderingRegion) {
-        self.split_horizontally_at(0.5)
+    /// Vertical split
+    /// +-----++-----+
+    /// |     ||     |
+    /// |     ||     |
+    /// |     ||     |
+    /// |     ||     |
+    /// +-----++-----+
+    pub fn split_vertically(self) -> (RenderingRegion, RenderingRegion) {
+        self.split_vertically_at(0.5)
     }
 
-    /// Horizontal split
-    /// +-----++-----+
-    /// |     ||     |
-    /// |     ||     |
-    /// |     ||     |
-    /// |     ||     |
-    /// +-----++-----+
-    pub fn split_horizontally_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
+    pub fn split_vertically_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
         let left_width = (self.width as f32 * percentage) as usize;
@@ -244,18 +244,18 @@ impl RenderingRegion {
         (left, right)
     }
 
-    pub fn split_vertically(self) -> (RenderingRegion, RenderingRegion) {
-        self.split_vertically_at(0.5)
+    /// Horizontal split
+    /// +------------+
+    /// |            |
+    /// +------------+
+    /// +------------+
+    /// |            |
+    /// +------------+
+    pub fn split_hotizontally_(self) -> (RenderingRegion, RenderingRegion) {
+        self.split_hotizontally_at_(0.5)
     }
 
-    /// Vertical split
-    /// +------------+
-    /// |            |
-    /// +------------+
-    /// +------------+
-    /// |            |
-    /// +------------+
-    pub fn split_vertically_at(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
+    pub fn split_hotizontally_at_(self, percentage: f32) -> (RenderingRegion, RenderingRegion) {
         assert!(percentage > 0.0 && percentage < 1.0);
 
         let top_height = (self.height as f32 * percentage) as usize;

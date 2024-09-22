@@ -35,8 +35,8 @@ impl App {
         let tui = tui::Terminal::try_new().unwrap();
 
         let rendering_region = tui.rendering_region();
-        let (left, mut right) = rendering_region.split_horizontally_at(0.2);
-        let (mut top, mut botton) = left.split_vertically();
+        let (left, mut right) = rendering_region.split_vertically_at(0.2);
+        let (mut top, mut botton) = left.split_hotizontally_();
 
         top.set_title(Some("[ Sprints ]".into()));
         let sprint_list = sprints.iter().map(|sprint| sprint.name.clone()).collect();
