@@ -85,7 +85,7 @@ impl Jira {
         }
     }
 
-    pub fn get_sprint_issues(&self, board_id: &str, sprint_id: &str) -> Vec<Issue> {
+    pub fn get_sprint_issues(&self, board_id: &str, sprint_id: u32) -> Vec<Issue> {
         #[derive(Deserialize)]
         struct Response {
             issues: Vec<Issue>,

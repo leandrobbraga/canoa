@@ -557,6 +557,8 @@ pub struct ItemList {
     rendering_region: RenderingRegion,
     selected_row: Option<usize>,
     offset: Vector2,
+    vertical_alignment: VerticalAlignment,
+    horizontal_alignment: HorizontalAlignment,
 }
 
 impl ItemList {
@@ -601,7 +603,45 @@ impl ItemList {
             rendering_region,
             selected_row: None,
             offset,
+            vertical_alignment,
+            horizontal_alignment,
         }
+    }
+
+    pub fn change_list(&mut self, items: Vec<String>) {
+        let inner_size = self.rendering_region.inner_size();
+
+        assert!(items.len() <= inner_size.height);
+        assert!(items.iter().map(|item| item.len()).max() < Some(inner_size.width));
+
+        let offset = {
+            let y_offset = match self.vertical_alignment {
+                VerticalAlignment::Top => 1, // 1 for the border
+                VerticalAlignment::Bottom => self.rendering_region.size.height - items.len() - 1, // -1 for the border
+                VerticalAlignment::Center => (self.rendering_region.size.height - items.len()) / 2,
+            };
+
+            let x_offset = match self.horizontal_alignment {
+                HorizontalAlignment::Left => 1, // 1 for the border
+                HorizontalAlignment::Right => {
+                    self.rendering_region.size.width
+                        - items.iter().map(|item| item.len()).max().unwrap_or(0)
+                        - 1
+                    // -1 for the border
+                }
+                HorizontalAlignment::Center => {
+                    (self.rendering_region.size.width
+                        - items.iter().map(|item| item.len()).max().unwrap_or(0))
+                        / 2
+                }
+            };
+
+            Vector2::new(x_offset, y_offset)
+        };
+
+        self.items = items;
+        self.selected_row = None;
+        self.offset = offset;
     }
 
     pub fn set_selected(&mut self, item_index: Option<usize>) {
@@ -661,6 +701,8 @@ pub struct Table {
     column_lengths: Vec<usize>,
     selected_row: Option<usize>,
     offset: Vector2,
+    vertical_alignment: VerticalAlignment,
+    horizontal_alignment: HorizontalAlignment,
 }
 
 impl Table {
@@ -714,11 +756,58 @@ impl Table {
             column_lengths,
             selected_row: None,
             offset,
+            vertical_alignment,
+            horizontal_alignment,
         }
     }
 
     pub fn set_selected(&mut self, row_index: Option<usize>) {
         self.selected_row = row_index
+    }
+
+    pub fn change_table(&mut self, items: Vec<Vec<String>>) {
+        let max_row_size = items.iter().map(|row| row.len()).max().unwrap();
+
+        let mut column_lengths = vec![0; max_row_size];
+        for row in items.iter() {
+            for (i, item) in row.iter().enumerate() {
+                if item.len() > column_lengths[i] {
+                    column_lengths[i] = item.len();
+                }
+            }
+        }
+
+        let max_width = usize::max(
+            column_lengths.iter().sum::<usize>() + column_lengths.len(),
+            self.rendering_region.inner_size().width,
+        );
+
+        let inner_size = self.rendering_region.inner_size();
+        assert!((items.len()) <= inner_size.height);
+
+        let offset = {
+            let y_offset = match self.vertical_alignment {
+                VerticalAlignment::Top => 1, // 1 for the border
+                VerticalAlignment::Bottom => self.rendering_region.size.height - items.len() - 1, // -1 for the border
+                VerticalAlignment::Center => (self.rendering_region.size.height - items.len()) / 2,
+            };
+
+            let x_offset = match self.horizontal_alignment {
+                HorizontalAlignment::Left => 1, // 1 for the border
+                HorizontalAlignment::Right => {
+                    // -1 for the border
+                    self.rendering_region.size.width - max_width - 1
+                }
+                HorizontalAlignment::Center => (self.rendering_region.size.width - max_width) / 2,
+            };
+
+            Vector2::new(x_offset, y_offset)
+        };
+
+        self.items = items;
+        self.column_lengths = column_lengths;
+        self.selected_row = None;
+        self.offset = offset;
     }
 }
 

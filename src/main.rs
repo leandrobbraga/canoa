@@ -4,18 +4,59 @@ mod tui;
 
 use config::Config;
 use jira::{Issue, Jira, Sprint};
-use tui::{Color, Widget};
+use tui::{Color, Terminal, Widget};
 
 // FIXME: Perform better error handling instead of unwrapping everything.
 struct App {
-    jira: Jira,
+    state: State,
+    tui: Tui,
+}
 
-    sprints: Vec<Sprint>,
-    issues: Vec<Issue>,
+struct State {
     active_sprint: usize,
     active_issue: usize,
 
-    tui: Tui,
+    active_window: Window,
+
+    sprints: Vec<Sprint>,
+    issues: Vec<Vec<Issue>>,
+    backlog: Vec<Issue>,
+}
+
+impl State {
+    fn fetch(jira: &Jira, board_id: &str) -> State {
+        let sprints = jira.get_board_active_and_future_sprints(board_id);
+
+        let (issues, backlog) = std::thread::scope(|scope| {
+            let mut handles = Vec::with_capacity(sprints.len());
+
+            for sprint in sprints.iter() {
+                let handle = scope.spawn(|| jira.get_sprint_issues(board_id, sprint.id));
+                handles.push(handle);
+            }
+
+            let backlog = scope
+                .spawn(|| jira.get_backlog_issues(board_id))
+                .join()
+                .unwrap();
+
+            let issues = handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .collect();
+
+            (issues, backlog)
+        });
+
+        State {
+            active_sprint: 0,
+            active_issue: 0,
+            active_window: Window::Issues,
+            sprints,
+            issues,
+            backlog,
+        }
+    }
 }
 
 impl App {
@@ -28,26 +69,186 @@ impl App {
         } = config;
 
         let jira = Jira::new(&user, &token, host);
+        let state = State::fetch(&jira, &board_id);
+        let terminal = Terminal::try_new().unwrap();
+        let tui = Tui::construct(terminal, &state);
 
-        let sprints = jira.get_board_active_and_future_sprints(&board_id);
-        let issues = jira.get_backlog_issues(&board_id);
+        App { state, tui }
+    }
 
-        let tui = tui::Terminal::try_new().unwrap();
+    fn move_issue_selection_down(&mut self) {
+        // FIXME: Deal with scrolling, currently is panicking
+        if self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1 {
+            return;
+        }
+        self.state.active_issue += 1;
+        self.sync_issues_selection();
+    }
 
-        let rendering_region = tui.rendering_region();
-        let (left, mut right) = rendering_region.split_vertically_at(0.35);
+    fn move_issue_selection_up(&mut self) {
+        if self.state.active_issue == 0 {
+            return;
+        }
+        self.state.active_issue -= 1;
+        self.sync_issues_selection();
+    }
+
+    fn sync_issues_selection(&mut self) {
+        self.tui.issues.set_selected(Some(self.state.active_issue));
+        self.tui.issue_description.change_text(
+            self.state.issues[self.state.active_sprint][self.state.active_issue]
+                .fields
+                .description
+                .clone(),
+        );
+    }
+
+    fn input(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
+        self.tui.terminal.tty()
+    }
+
+    fn select_sprints(&mut self) {
+        match self.state.active_window {
+            Window::Description => self.tui.issue_description.set_border_color(Color::Default),
+            Window::Issues => {
+                self.tui.issues.set_border_color(Color::Default);
+                self.tui.issues.set_selected(None);
+            }
+            Window::Sprints => return,
+        };
+
+        self.state.active_window = Window::Sprints;
+        self.tui.sprints.set_border_color(Color::Green);
+        self.tui
+            .sprints
+            .set_selected(Some(self.state.active_sprint));
+    }
+
+    fn select_issues(&mut self) {
+        match self.state.active_window {
+            Window::Description => self.tui.issue_description.set_border_color(Color::Default),
+            Window::Sprints => {
+                self.tui.sprints.set_border_color(Color::Default);
+                self.tui.sprints.set_selected(None);
+            }
+            Window::Issues => return,
+        };
+
+        self.state.active_window = Window::Issues;
+        self.tui.issues.set_border_color(Color::Green);
+        self.tui.issues.set_selected(Some(self.state.active_issue));
+    }
+
+    fn select_issue_description(&mut self) {
+        match self.state.active_window {
+            Window::Sprints => {
+                self.tui.issue_description.set_border_color(Color::Default);
+                self.tui.sprints.set_selected(None);
+            }
+            Window::Issues => {
+                self.tui.issues.set_border_color(Color::Default);
+                self.tui.issues.set_selected(None);
+            }
+            Window::Description => return,
+        };
+
+        self.state.active_window = Window::Description;
+        self.tui.issue_description.set_border_color(Color::Green);
+    }
+
+    fn move_sprint_selection_down(&mut self) {
+        // FIXME: Deal with scrolling, currently is panicking
+        // TODO: Deal with backlog
+        if self.state.active_sprint >= self.state.sprints.len() - 1 {
+            return;
+        }
+
+        self.state.active_issue = 0;
+        self.sync_issues_selection();
+        self.state.active_sprint += 1;
+
+        let issues_table: Vec<Vec<String>> = self.state.issues[self.state.active_sprint]
+            .iter()
+            .take(self.tui.issues.inner_size().height)
+            .map(|issue| {
+                vec![
+                    issue.name.clone(),
+                    issue.fields.status.clone(),
+                    issue.fields.kind.clone(),
+                    format_assignee(issue.fields.assignee.clone()),
+                    issue.fields.summary.clone(),
+                ]
+            })
+            .collect();
+
+        self.tui.issues.change_table(issues_table);
+
+        self.tui
+            .sprints
+            .set_selected(Some(self.state.active_sprint))
+    }
+
+    fn move_sprint_selection_up(&mut self) {
+        // FIXME: Deal with scrolling, currently is panicking
+        if self.state.active_sprint == 0 {
+            return;
+        }
+
+        self.state.active_issue = 0;
+        self.sync_issues_selection();
+        self.state.active_sprint -= 1;
+
+        let issues_table: Vec<Vec<String>> = self.state.issues[self.state.active_sprint]
+            .iter()
+            .take(self.tui.issues.inner_size().height)
+            .map(|issue| {
+                vec![
+                    issue.name.clone(),
+                    issue.fields.status.clone(),
+                    issue.fields.kind.clone(),
+                    format_assignee(issue.fields.assignee.clone()),
+                    issue.fields.summary.clone(),
+                ]
+            })
+            .collect();
+
+        self.tui.issues.change_table(issues_table);
+
+        self.tui
+            .sprints
+            .set_selected(Some(self.state.active_sprint))
+    }
+}
+
+struct Tui {
+    terminal: Terminal,
+    sprints: tui::ItemList,
+    issues: tui::Table,
+    issue_description: tui::Text,
+}
+
+impl Tui {
+    fn construct(terminal: Terminal, state: &State) -> Tui {
+        let rendering_region = terminal.rendering_region();
+        let (left, mut right) = rendering_region.split_vertically_at(0.40);
         let (mut top, mut botton) = left.split_hotizontally_at(0.2);
 
-        top.set_title(Some("[ Sprints ]".into()));
-        let sprint_list = sprints.iter().map(|sprint| sprint.name.clone()).collect();
-        let sprints_tui = top.item_list(
+        top.set_title(Some("[ 1 ] Sprints ".into()));
+        let mut sprint_list: Vec<_> = state
+            .sprints
+            .iter()
+            .map(|sprint| sprint.name.clone())
+            .collect();
+        sprint_list.push("Backlog".into());
+        let mut sprints = top.item_list(
             sprint_list,
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
         );
+        sprints.set_selected(Some(0));
 
         // TODO: Add scrolling
-        let issues_table: Vec<Vec<String>> = issues
+        let issues_table: Vec<Vec<String>> = state.issues[0]
             .iter()
             .take(botton.inner_size().height)
             .map(|issue| {
@@ -61,92 +262,49 @@ impl App {
             })
             .collect();
 
-        botton.set_title(Some("[ Issues ]".into()));
-        let mut issues_tui = botton.table(
+        botton.set_title(Some("[ 2 ] Issues ".into()));
+        let mut issues = botton.table(
             issues_table,
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
         );
-        issues_tui.set_border_color(Color::Green);
-        issues_tui.set_selected(Some(0));
+        issues.set_border_color(Color::Green);
+        issues.set_selected(Some(0));
 
-        let description = issues[0]
+        let description = state.issues[0][0]
             .fields
             .description
             .clone()
             .unwrap_or("This place will contain the selected issue details.".into());
-        right.set_title(Some("[ Description ]".into()));
-        let issue_details_tui = right.text(
+        right.set_title(Some("[ 3 ] Description ".into()));
+        let issue_description = right.text(
             description,
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
         );
 
-        let tui = Tui {
-            tui,
-            sprints: sprints_tui,
-            issues: issues_tui,
-            issue_details: issue_details_tui,
-        };
-
-        App {
-            jira,
+        Tui {
+            terminal,
             sprints,
             issues,
-            active_sprint: 0,
-            active_issue: 0,
-            tui,
+            issue_description,
         }
     }
 
-    fn move_issue_selection_down(&mut self) {
-        // FIXME: Deal with scrolling, currently is panicking
-        if self.active_issue >= self.issues.len() {
-            return;
-        }
-
-        self.active_issue += 1;
-
-        self.sync_selection();
-    }
-
-    fn move_issue_selection_up(&mut self) {
-        if self.active_issue == 0 {
-            return;
-        }
-
-        self.active_issue -= 1;
-
-        self.sync_selection();
-    }
-
-    fn sync_selection(&mut self) {
-        self.tui.issues.set_selected(Some(self.active_issue));
-        self.tui
-            .issue_details
-            .change_text(self.issues[self.active_issue].fields.description.clone());
-    }
-
-    fn input(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
-        self.tui.tui.tty()
-    }
-}
-
-struct Tui {
-    tui: tui::Terminal,
-    sprints: tui::ItemList,
-    issues: tui::Table,
-    issue_details: tui::Text,
-}
-
-impl Tui {
     fn render(&mut self) {
-        self.sprints.render(&mut self.tui.buffer);
-        self.issues.render(&mut self.tui.buffer);
-        self.issue_details.render(&mut self.tui.buffer);
+        self.sprints.render(&mut self.terminal.buffer);
+        self.issues.render(&mut self.terminal.buffer);
+        self.issue_description.render(&mut self.terminal.buffer);
 
-        self.tui.draw();
+        self.terminal.draw();
     }
+}
+
+#[derive(Clone, Copy)]
+enum Window {
+    Issues,
+    Description,
+    Sprints,
 }
 
 fn main() {
@@ -162,12 +320,29 @@ fn main() {
             break;
         };
 
-        // TODO: Add possibility to change from issues to sprint view with (1) and (2)
         // TODO: Allow filtering issues by who is assigned to it
         match input {
-            b'j' => app.move_issue_selection_down(),
-            b'k' => app.move_issue_selection_up(),
+            // General commands
+            b'1' => app.select_sprints(),
+            b'2' => app.select_issues(),
+            b'3' => app.select_issue_description(),
             b'q' => break,
+
+            // Sprints commands
+            b'j' if matches!(app.state.active_window, Window::Sprints) => {
+                app.move_sprint_selection_down()
+            }
+            b'k' if matches!(app.state.active_window, Window::Sprints) => {
+                app.move_sprint_selection_up()
+            }
+
+            // Issue list commands
+            b'j' if matches!(app.state.active_window, Window::Issues) => {
+                app.move_issue_selection_down()
+            }
+            b'k' if matches!(app.state.active_window, Window::Issues) => {
+                app.move_issue_selection_up()
+            }
             _ => (),
         };
     }
