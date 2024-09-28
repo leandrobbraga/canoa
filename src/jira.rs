@@ -168,13 +168,13 @@ fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
     // The output length is calculated by the 'Basic ' prefix size (6 chars) added to the encoded
     // credentials, which yields 4 characters for every triplet (including incomplete triplets)
     // after encoded in Base64.
-    let output_lenght = 10 + 4 * ((user.len() + token.len()) / 3);
-    let mut header = Vec::with_capacity(output_lenght);
+    let output_length = 10 + 4 * ((user.len() + token.len()) / 3);
+    let mut header = Vec::with_capacity(output_length);
     header.extend_from_slice(b"Basic ");
 
-    let input_lenght = user.len() + token.len() + 1;
+    let input_length = user.len() + token.len() + 1;
     let chunk_size = 3;
-    let chunk_count = input_lenght / chunk_size;
+    let chunk_count = input_length / chunk_size;
 
     let mut iterator = user.bytes().chain(":".bytes()).chain(token.bytes());
 
@@ -195,7 +195,7 @@ fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
     }
 
     // Remaining, if it exists
-    if input_lenght % 3 != 0 {
+    if input_length % 3 != 0 {
         let mut n = 0;
         let mut index = 0;
         for byte in iterator {
@@ -208,7 +208,7 @@ fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
         }
 
         // Padding to fill the end
-        header.extend(iter::repeat(b'=').take(output_lenght - header.len()));
+        header.extend(iter::repeat(b'=').take(output_length - header.len()));
     }
 
     // SAFETY: The header is made of two parts: the 'Basic ' prefix and the Base64 encoded string,
