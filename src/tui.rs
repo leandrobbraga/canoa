@@ -712,7 +712,7 @@ impl Table {
         horizontal_alignment: HorizontalAlignment,
         rendering_region: RenderingRegion,
     ) -> Table {
-        let max_row_size = items.iter().map(|row| row.len()).max().unwrap();
+        let max_row_size = items.iter().map(|row| row.len()).max().unwrap_or(0);
 
         let mut column_lengths = vec![0; max_row_size];
         for row in items.iter() {
