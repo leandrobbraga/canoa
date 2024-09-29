@@ -279,3 +279,4 @@ pub enum Window {
 }
 
 // FIXME: Deal with sprints/issue scrolling, currently is panicking
+// TODO: Sync the AppState every so often

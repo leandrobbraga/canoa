@@ -489,7 +489,12 @@ impl Text {
 
     pub fn change_text(&mut self, new_text: Option<String>) {
         if let Some(text) = new_text {
-            self.text = text.chars().collect();
+            // If not removed the tabs will be rendered as multiple spaces but the renderer will
+            // count only one character, breaking the UI
+            let text = text.replace('\t', "    ");
+            // Some unicode characters are not rendered, breaking the UI
+            // TODO: Find a scalable way to keep only "printable" characters
+            self.text = text.chars().filter(|c| !(*c == '\u{300}')).collect();
         } else {
             self.text.clear();
         }
@@ -958,3 +963,4 @@ impl<'a> Iterator for HardwrappingText<'a> {
 }
 
 // TODO: Add tests with expectations
+// FIXME: There is a bug in the `Text` rendering which is rendering outside boundaries
