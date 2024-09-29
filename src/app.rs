@@ -76,8 +76,8 @@ impl App {
     fn ui_initial_state(&mut self) {
         self.ui.sprints.set_selected(Some(self.state.active_sprint));
         self.ui.sprints.set_border_color(Color::Green);
-        self.update_ui_issues_window();
-        self.update_ui_issue_description_window();
+        self.sync_ui_issues_window();
+        self.sync_ui_issue_description_window();
     }
 
     pub fn move_issue_selection_down(&mut self) {
@@ -87,7 +87,7 @@ impl App {
         }
         self.state.active_issue += 1;
         self.ui.issues.set_selected(Some(self.state.active_issue));
-        self.update_ui_issue_description_window();
+        self.sync_ui_issue_description_window();
     }
 
     pub fn move_issue_selection_up(&mut self) {
@@ -96,10 +96,10 @@ impl App {
         }
         self.state.active_issue -= 1;
         self.ui.issues.set_selected(Some(self.state.active_issue));
-        self.update_ui_issue_description_window();
+        self.sync_ui_issue_description_window();
     }
 
-    fn update_ui_issue_description_window(&mut self) {
+    fn sync_ui_issue_description_window(&mut self) {
         self.ui.issue_description.change_text(
             self.state.issues[self.state.active_sprint][self.state.active_issue]
                 .fields
@@ -164,8 +164,8 @@ impl App {
         self.state.active_issue = 0;
         self.state.active_sprint += 1;
         self.ui.sprints.set_selected(Some(self.state.active_sprint));
-        self.update_ui_issues_window();
-        self.update_ui_issue_description_window();
+        self.sync_ui_issues_window();
+        self.sync_ui_issue_description_window();
     }
 
     pub fn move_sprint_selection_up(&mut self) {
@@ -176,11 +176,11 @@ impl App {
         self.state.active_issue = 0;
         self.state.active_sprint -= 1;
         self.ui.sprints.set_selected(Some(self.state.active_sprint));
-        self.update_ui_issues_window();
-        self.update_ui_issue_description_window();
+        self.sync_ui_issues_window();
+        self.sync_ui_issue_description_window();
     }
 
-    fn update_ui_issues_window(&mut self) {
+    fn sync_ui_issues_window(&mut self) {
         let issues_table = self.state.issues[self.state.active_sprint]
             .iter()
             .take(self.ui.issues.inner_size().height)
@@ -189,7 +189,18 @@ impl App {
                     issue.name.clone(),
                     issue.fields.status.clone(),
                     issue.fields.kind.clone(),
-                    format_assignee(issue.fields.assignee.clone()),
+                    issue
+                        .fields
+                        .assignee
+                        .clone()
+                        .map(|assignee| {
+                            assignee
+                                .split(" ")
+                                .flat_map(|s| s.chars().nth(0))
+                                .take(3)
+                                .collect()
+                        })
+                        .unwrap_or_default(),
                     issue.fields.summary.clone(),
                 ]
             })
@@ -265,18 +276,6 @@ pub enum Window {
     Issues,
     Description,
     Sprints,
-}
-
-fn format_assignee(assignee: Option<String>) -> String {
-    if let Some(assignee) = assignee {
-        return assignee
-            .split(" ")
-            .flat_map(|s| s.chars().nth(0))
-            .take(3)
-            .collect();
-    }
-
-    String::new()
 }
 
 // FIXME: Deal with sprints/issue scrolling, currently is panicking
