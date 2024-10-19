@@ -20,27 +20,26 @@ pub struct AppState {
 
 impl AppState {
     fn get(jira: &Jira, board_id: &str) -> AppState {
-        let sprints = jira.get_board_active_and_future_sprints(board_id);
+        let (sprints, issues, backlog) = std::thread::scope(|scope| {
+            let backlog = scope.spawn(|| jira.get_backlog_issues(board_id));
+            let sprints = jira.get_board_active_and_future_sprints(board_id);
 
-        let (issues, backlog) = std::thread::scope(|scope| {
             let mut handles = Vec::with_capacity(sprints.len());
 
-            for sprint in sprints.iter() {
-                let handle = scope.spawn(|| jira.get_sprint_issues(board_id, sprint.id));
+            for sprint in &sprints {
+                let id = sprint.id;
+                let handle = scope.spawn(move || jira.get_sprint_issues(board_id, id));
                 handles.push(handle);
             }
-
-            let backlog = scope
-                .spawn(|| jira.get_backlog_issues(board_id))
-                .join()
-                .unwrap();
 
             let issues = handles
                 .into_iter()
                 .map(|handle| handle.join().unwrap())
                 .collect();
 
-            (issues, backlog)
+            let backlog = backlog.join().unwrap();
+
+            (sprints, issues, backlog)
         });
 
         AppState {

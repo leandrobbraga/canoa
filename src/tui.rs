@@ -613,6 +613,7 @@ impl ItemList {
         }
     }
 
+    // TODO: Remove duplicate code
     pub fn change_list(&mut self, items: Vec<String>) {
         let inner_size = self.rendering_region.inner_size();
 
@@ -770,6 +771,7 @@ impl Table {
         self.selected_row = row_index
     }
 
+    // TODO: Remove duplicate code
     pub fn change_table(&mut self, items: Vec<Vec<String>>) {
         let max_row_size = items.iter().map(|row| row.len()).max().unwrap();
 
