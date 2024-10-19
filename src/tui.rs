@@ -8,11 +8,6 @@ use std::{mem::MaybeUninit, os::fd::AsRawFd};
 
 use libc::termios as Termios;
 
-// TODO: Introduce the concept of vertical scrolling
-// TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
-// TODO: Add floating panel
-// TODO: Can we get away with '&str' instead of 'String' everywhere in the Tui?
-// TODO: Handle resizes
 pub trait Widget {
     fn render(&self, buffer: &mut Buffer);
     fn size(&self) -> Size;
@@ -963,4 +958,9 @@ impl<'a> Iterator for HardwrappingText<'a> {
     }
 }
 
+// TODO: Introduce the concept of vertical scrolling
+// TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
+// TODO: Add floating panel
+// TODO: Can we get away with '&str' instead of 'String' everywhere in the Tui?
+// TODO: Handle resizes
 // TODO: Add tests with expectations

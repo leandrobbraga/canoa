@@ -83,7 +83,6 @@ impl App {
     }
 
     pub fn move_issue_selection_down(&mut self) {
-        // TODO: Add scrolling support
         if (self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1)
             || (self.state.active_issue >= self.ui.issues.inner_size().height - 1)
         {
@@ -160,7 +159,6 @@ impl App {
     }
 
     pub fn move_sprint_selection_down(&mut self) {
-        // TODO: Add scrolling support
         if (self.state.active_sprint >= self.state.sprints.len() - 1)
             | (self.state.active_sprint >= self.ui.sprints.inner_size().height)
         {
@@ -284,3 +282,7 @@ pub enum Window {
 }
 
 // TODO: Sync the AppState every so often
+// TODO: The issue name is cut when it's too long, it might be useful to add it in the description
+//       screen somehow
+// TODO: Add '/' to filter issues or sprints
+// TODO: Handle scrolling issues and sprints
