@@ -22,7 +22,6 @@ pub trait Widget {
     fn set_title(&mut self, title: Option<String>);
 
     fn rendering_region(self) -> RenderingRegion;
-    // TODO: Add methods for inner height and width for content rendering.
 }
 
 #[derive(Default, Clone, Copy)]
@@ -965,4 +964,3 @@ impl<'a> Iterator for HardwrappingText<'a> {
 }
 
 // TODO: Add tests with expectations
-// FIXME: There is a bug in the `Text` rendering which is rendering outside boundaries
