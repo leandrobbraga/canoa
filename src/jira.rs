@@ -12,7 +12,6 @@ pub struct Jira {
 pub struct Sprint {
     pub id: u32,
     pub name: String,
-    pub state: String,
 }
 
 #[derive(Clone, Deserialize, Debug)]
