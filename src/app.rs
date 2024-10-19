@@ -10,7 +10,10 @@ pub struct App {
 pub struct AppState {
     pub active_window: Window,
 
+    sprint_offset: usize,
     active_sprint: usize,
+
+    issue_offset: usize,
     active_issue: usize,
 
     sprints: Vec<Sprint>,
@@ -48,7 +51,9 @@ impl AppState {
 
         AppState {
             active_sprint: 0,
+            sprint_offset: 0,
             active_issue: 0,
+            issue_offset: 0,
             active_window: Window::Sprints,
             sprints,
             issues,
@@ -68,7 +73,7 @@ impl App {
         let jira = Jira::new(&user, &token, host);
         let state = AppState::get(&jira, &board_id);
         let terminal = Terminal::try_new().unwrap();
-        let ui = Ui::new(terminal, &state);
+        let ui = Ui::new(terminal);
 
         let mut app = App { state, ui };
         app.ui_initial_state();
@@ -80,25 +85,43 @@ impl App {
         self.ui.sprints.set_border_color(Color::Green);
         self.sync_ui_issues_window();
         self.sync_ui_issue_description_window();
+        self.sync_ui_sprints_window();
     }
 
     pub fn move_issue_selection_down(&mut self) {
-        if (self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1)
-            || (self.state.active_issue >= self.ui.issues.inner_size().height - 1)
-        {
+        if self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1 {
             return;
-        }
+        };
+
         self.state.active_issue += 1;
-        self.ui.issues.set_selected(Some(self.state.active_issue));
+
+        if self.state.active_issue - self.state.issue_offset >= self.ui.issues.inner_size().height {
+            self.state.issue_offset += 1;
+            self.sync_ui_issues_window();
+        }
+
+        self.ui
+            .issues
+            .set_selected(Some(self.state.active_issue - self.state.issue_offset));
+
         self.sync_ui_issue_description_window();
     }
 
     pub fn move_issue_selection_up(&mut self) {
-        if self.state.active_issue == 0 {
+        if self.state.active_issue <= 0 {
             return;
-        }
+        };
+
         self.state.active_issue -= 1;
-        self.ui.issues.set_selected(Some(self.state.active_issue));
+
+        if self.state.active_issue - self.state.issue_offset >= self.ui.issues.inner_size().height {
+            self.state.issue_offset -= 1;
+            self.sync_ui_issues_window();
+        }
+
+        self.ui
+            .issues
+            .set_selected(Some(self.state.active_issue - self.state.issue_offset));
         self.sync_ui_issue_description_window();
     }
 
@@ -159,15 +182,24 @@ impl App {
     }
 
     pub fn move_sprint_selection_down(&mut self) {
-        if (self.state.active_sprint >= self.state.sprints.len() - 1)
-            | (self.state.active_sprint >= self.ui.sprints.inner_size().height)
-        {
+        if self.state.active_sprint >= self.state.sprints.len() - 1 {
             return;
         }
 
-        self.state.active_issue = 0;
         self.state.active_sprint += 1;
-        self.ui.sprints.set_selected(Some(self.state.active_sprint));
+        self.state.active_issue = 0;
+
+        if self.state.active_sprint - self.state.sprint_offset
+            >= self.ui.sprints.inner_size().height
+        {
+            self.state.sprint_offset += 1;
+            self.sync_ui_sprints_window();
+        }
+
+        self.ui
+            .sprints
+            .set_selected(Some(self.state.active_sprint - self.state.sprint_offset));
+
         self.sync_ui_issues_window();
         self.sync_ui_issue_description_window();
     }
@@ -179,13 +211,24 @@ impl App {
 
         self.state.active_issue = 0;
         self.state.active_sprint -= 1;
-        self.ui.sprints.set_selected(Some(self.state.active_sprint));
+
+        if self.state.active_sprint - self.state.sprint_offset
+            >= self.ui.sprints.inner_size().height
+        {
+            self.state.sprint_offset -= 1;
+            self.sync_ui_sprints_window();
+        }
+
+        self.ui
+            .sprints
+            .set_selected(Some(self.state.active_sprint - self.state.sprint_offset));
+
         self.sync_ui_issues_window();
         self.sync_ui_issue_description_window();
     }
 
     fn sync_ui_issues_window(&mut self) {
-        let issues_table = self.state.issues[self.state.active_sprint]
+        let issues_table = self.state.issues[self.state.active_sprint][self.state.issue_offset..]
             .iter()
             .take(self.ui.issues.inner_size().height)
             .map(|issue| {
@@ -213,6 +256,16 @@ impl App {
         self.ui.issues.change_table(issues_table);
     }
 
+    fn sync_ui_sprints_window(&mut self) {
+        let sprints_list = self.state.sprints[self.state.sprint_offset..]
+            .iter()
+            .take(self.ui.sprints.inner_size().height)
+            .map(|sprint| sprint.name.clone())
+            .collect();
+
+        self.ui.sprints.change_list(sprints_list);
+    }
+
     pub fn input(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
         self.ui.terminal.tty()
     }
@@ -226,19 +279,14 @@ pub struct Ui {
 }
 
 impl Ui {
-    fn new(terminal: Terminal, state: &AppState) -> Ui {
+    fn new(terminal: Terminal) -> Ui {
         let rendering_region = terminal.rendering_region();
         let (left, mut right) = rendering_region.split_vertically_at(0.40);
         let (mut top, mut botton) = left.split_hotizontally_at(0.2);
 
         top.set_title(Some("[ 1 ] Sprints ".into()));
-        let sprint_list: Vec<_> = state
-            .sprints
-            .iter()
-            .map(|sprint| sprint.name.clone())
-            .collect();
         let sprints = top.item_list(
-            sprint_list,
+            Default::default(),
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
         );
@@ -285,4 +333,4 @@ pub enum Window {
 // TODO: The issue name is cut when it's too long, it might be useful to add it in the description
 //       screen somehow
 // TODO: Add '/' to filter issues or sprints
-// TODO: Handle scrolling issues and sprints
+// TODO: Add scrolling to description

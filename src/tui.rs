@@ -511,7 +511,6 @@ impl Widget for Text {
         for (line_index, line) in
             HardwrappingText::new(&self.text, self.rendering_region.inner_size().width)
                 .into_iter()
-                // FIXME: Deal with scrolling
                 .take(self.rendering_region.inner_size().height)
                 .enumerate()
         {
@@ -958,7 +957,6 @@ impl<'a> Iterator for HardwrappingText<'a> {
     }
 }
 
-// TODO: Introduce the concept of vertical scrolling
 // TODO: Add diff-rendering instead of clearing and rendering everything back again on every tick
 // TODO: Add floating panel
 // TODO: Can we get away with '&str' instead of 'String' everywhere in the Tui?
