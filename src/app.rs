@@ -80,8 +80,10 @@ impl App {
     }
 
     pub fn move_issue_selection_down(&mut self) {
-        // FIXME: Deal with scrolling, currently is panicking
-        if self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1 {
+        // TODO: Add scrolling support
+        if (self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1)
+            || (self.state.active_issue >= self.ui.issues.inner_size().height - 1)
+        {
             return;
         }
         self.state.active_issue += 1;
@@ -156,7 +158,10 @@ impl App {
 
     pub fn move_sprint_selection_down(&mut self) {
         // TODO: Deal with backlog
-        if self.state.active_sprint >= self.state.sprints.len() - 1 {
+        // TODO: Add scroll support
+        if (self.state.active_sprint >= self.state.sprints.len() - 1)
+            | (self.state.active_sprint >= self.ui.sprints.inner_size().height)
+        {
             return;
         }
 
