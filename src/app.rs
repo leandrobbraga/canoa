@@ -15,14 +15,13 @@ pub struct AppState {
 
     sprints: Vec<Sprint>,
     issues: Vec<Vec<Issue>>,
-    backlog: Vec<Issue>,
 }
 
 impl AppState {
     fn get(jira: &Jira, board_id: &str) -> AppState {
-        let (sprints, issues, backlog) = std::thread::scope(|scope| {
+        let (sprints, issues) = std::thread::scope(|scope| {
             let backlog = scope.spawn(|| jira.get_backlog_issues(board_id));
-            let sprints = jira.get_board_active_and_future_sprints(board_id);
+            let mut sprints = jira.get_board_active_and_future_sprints(board_id);
 
             let mut handles = Vec::with_capacity(sprints.len());
 
@@ -32,14 +31,19 @@ impl AppState {
                 handles.push(handle);
             }
 
+            sprints.push(Sprint {
+                id: 0,
+                name: "Backlog".into(),
+            });
+
+            handles.push(backlog);
+
             let issues = handles
                 .into_iter()
                 .map(|handle| handle.join().unwrap())
                 .collect();
 
-            let backlog = backlog.join().unwrap();
-
-            (sprints, issues, backlog)
+            (sprints, issues)
         });
 
         AppState {
@@ -48,7 +52,6 @@ impl AppState {
             active_window: Window::Sprints,
             sprints,
             issues,
-            backlog,
         }
     }
 }
@@ -157,8 +160,7 @@ impl App {
     }
 
     pub fn move_sprint_selection_down(&mut self) {
-        // TODO: Deal with backlog
-        // TODO: Add scroll support
+        // TODO: Add scrolling support
         if (self.state.active_sprint >= self.state.sprints.len() - 1)
             | (self.state.active_sprint >= self.ui.sprints.inner_size().height)
         {
@@ -232,12 +234,11 @@ impl Ui {
         let (mut top, mut botton) = left.split_hotizontally_at(0.2);
 
         top.set_title(Some("[ 1 ] Sprints ".into()));
-        let mut sprint_list: Vec<_> = state
+        let sprint_list: Vec<_> = state
             .sprints
             .iter()
             .map(|sprint| sprint.name.clone())
             .collect();
-        sprint_list.push("Backlog".into());
         let sprints = top.item_list(
             sprint_list,
             tui::VerticalAlignment::Top,
@@ -282,5 +283,4 @@ pub enum Window {
     Sprints,
 }
 
-// FIXME: Deal with sprints/issue scrolling, currently is panicking
 // TODO: Sync the AppState every so often
