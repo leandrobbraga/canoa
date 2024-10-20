@@ -1,18 +1,33 @@
 mod app;
+mod commands;
 mod config;
 mod jira;
 mod tui;
 
-use app::{App, Window};
+use app::{State, Ui, Window};
+use config::Config;
+use jira::Jira;
+use tui::Terminal;
 
 fn main() {
-    let config = config::configuration().unwrap();
+    let Config {
+        user,
+        token,
+        board_id,
+        host,
+    } = config::configuration().unwrap();
 
-    let mut app = App::from_config(config);
-    let mut inputs = app.input().unwrap();
+    let jira = Jira::new(&user, &token, host);
+    let state = State::new(&jira, &board_id);
+    let mut terminal = Terminal::try_new().unwrap();
+    let mut inputs = terminal.tty().unwrap();
+    let mut ui = Ui::new(terminal.rendering_region());
+
+    ui.initial_state(&state);
 
     loop {
-        app.ui.render();
+        ui.render(&mut terminal.buffer);
+        terminal.draw();
 
         let Some(input) = inputs.next().map(|input| input.unwrap()) else {
             break;
@@ -20,23 +35,23 @@ fn main() {
 
         // Commands that are independent to the active_window
         match input {
-            b'1' => app.select_sprints_window(),
-            b'2' => app.select_issues_window(),
-            b'3' => app.select_issue_description_window(),
+            b'1' => ui.select_sprints_window(),
+            b'2' => ui.select_issues_window(),
+            b'3' => ui.select_issue_description_window(),
             b'q' => break,
             _ => (),
         };
 
-        // Window-specific commands
-        match app.state.active_window {
+        // Window-specific commands.
+        match ui.active_window {
             Window::Issues => match input {
-                b'j' => app.move_issue_selection_down(),
-                b'k' => app.move_issue_selection_up(),
+                b'j' => ui.move_issue_selection_down(&state),
+                b'k' => ui.move_issue_selection_up(&state),
                 _ => (),
             },
             Window::Sprints => match input {
-                b'j' => app.move_sprint_selection_down(),
-                b'k' => app.move_sprint_selection_up(),
+                b'j' => ui.move_sprint_selection_down(&state),
+                b'k' => ui.move_sprint_selection_up(&state),
                 _ => (),
             },
             _ => (),

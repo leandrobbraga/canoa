@@ -1,27 +1,13 @@
-use crate::config::Config;
 use crate::jira::{Issue, Jira, Sprint};
-use crate::tui::{self, Color, Terminal, Widget};
+use crate::tui::{self, Buffer, Color, RenderingRegion, Widget};
 
-pub struct App {
-    pub state: AppState,
-    pub ui: Ui,
+pub struct State {
+    pub sprints: Vec<Sprint>,
+    pub issues: Vec<Vec<Issue>>,
 }
 
-pub struct AppState {
-    pub active_window: Window,
-
-    sprint_offset: usize,
-    active_sprint: usize,
-
-    issue_offset: usize,
-    active_issue: usize,
-
-    sprints: Vec<Sprint>,
-    issues: Vec<Vec<Issue>>,
-}
-
-impl AppState {
-    fn get(jira: &Jira, board_id: &str) -> AppState {
+impl State {
+    pub fn new(jira: &Jira, board_id: &str) -> State {
         let (sprints, issues) = std::thread::scope(|scope| {
             let backlog = scope.spawn(|| jira.get_backlog_issues(board_id));
             let mut sprints = jira.get_board_active_and_future_sprints(board_id);
@@ -49,238 +35,24 @@ impl AppState {
             (sprints, issues)
         });
 
-        AppState {
-            active_sprint: 0,
-            sprint_offset: 0,
-            active_issue: 0,
-            issue_offset: 0,
-            active_window: Window::Sprints,
-            sprints,
-            issues,
-        }
-    }
-}
-
-impl App {
-    pub fn from_config(config: Config) -> Self {
-        let Config {
-            user,
-            token,
-            board_id,
-            host,
-        } = config;
-
-        let jira = Jira::new(&user, &token, host);
-        let state = AppState::get(&jira, &board_id);
-        let terminal = Terminal::try_new().unwrap();
-        let ui = Ui::new(terminal);
-
-        let mut app = App { state, ui };
-        app.ui_initial_state();
-        app
-    }
-
-    fn ui_initial_state(&mut self) {
-        self.ui.sprints.set_selected(Some(self.state.active_sprint));
-        self.ui.sprints.set_border_color(Color::Green);
-        self.sync_ui_issues_window();
-        self.sync_ui_issue_description_window();
-        self.sync_ui_sprints_window();
-    }
-
-    pub fn move_issue_selection_down(&mut self) {
-        if self.state.active_issue >= self.state.issues[self.state.active_sprint].len() - 1 {
-            return;
-        };
-
-        self.state.active_issue += 1;
-
-        if self.state.active_issue - self.state.issue_offset >= self.ui.issues.inner_size().height {
-            self.state.issue_offset += 1;
-            self.sync_ui_issues_window();
-        }
-
-        self.ui
-            .issues
-            .set_selected(Some(self.state.active_issue - self.state.issue_offset));
-
-        self.sync_ui_issue_description_window();
-    }
-
-    pub fn move_issue_selection_up(&mut self) {
-        if self.state.active_issue <= 0 {
-            return;
-        };
-
-        self.state.active_issue -= 1;
-
-        if self.state.active_issue - self.state.issue_offset >= self.ui.issues.inner_size().height {
-            self.state.issue_offset -= 1;
-            self.sync_ui_issues_window();
-        }
-
-        self.ui
-            .issues
-            .set_selected(Some(self.state.active_issue - self.state.issue_offset));
-        self.sync_ui_issue_description_window();
-    }
-
-    fn sync_ui_issue_description_window(&mut self) {
-        self.ui.issue_description.change_text(
-            self.state.issues[self.state.active_sprint][self.state.active_issue]
-                .fields
-                .description
-                .clone(),
-        );
-    }
-
-    pub fn select_sprints_window(&mut self) {
-        match self.state.active_window {
-            Window::Description => self.ui.issue_description.set_border_color(Color::Default),
-            Window::Issues => {
-                self.ui.issues.set_border_color(Color::Default);
-                self.ui.issues.set_selected(None);
-            }
-            Window::Sprints => return,
-        };
-
-        self.state.active_window = Window::Sprints;
-        self.ui.sprints.set_border_color(Color::Green);
-        self.ui.sprints.set_selected(Some(self.state.active_sprint));
-    }
-
-    pub fn select_issues_window(&mut self) {
-        match self.state.active_window {
-            Window::Description => self.ui.issue_description.set_border_color(Color::Default),
-            Window::Sprints => {
-                self.ui.sprints.set_border_color(Color::Default);
-                self.ui.sprints.set_selected(None);
-            }
-            Window::Issues => return,
-        };
-
-        self.state.active_window = Window::Issues;
-        self.ui.issues.set_border_color(Color::Green);
-        self.ui.issues.set_selected(Some(self.state.active_issue));
-    }
-
-    pub fn select_issue_description_window(&mut self) {
-        match self.state.active_window {
-            Window::Sprints => {
-                self.ui.issue_description.set_border_color(Color::Default);
-                self.ui.sprints.set_selected(None);
-            }
-            Window::Issues => {
-                self.ui.issues.set_border_color(Color::Default);
-                self.ui.issues.set_selected(None);
-            }
-            Window::Description => return,
-        };
-
-        self.state.active_window = Window::Description;
-        self.ui.issue_description.set_border_color(Color::Green);
-    }
-
-    pub fn move_sprint_selection_down(&mut self) {
-        if self.state.active_sprint >= self.state.sprints.len() - 1 {
-            return;
-        }
-
-        self.state.active_sprint += 1;
-        self.state.active_issue = 0;
-
-        if self.state.active_sprint - self.state.sprint_offset
-            >= self.ui.sprints.inner_size().height
-        {
-            self.state.sprint_offset += 1;
-            self.sync_ui_sprints_window();
-        }
-
-        self.ui
-            .sprints
-            .set_selected(Some(self.state.active_sprint - self.state.sprint_offset));
-
-        self.sync_ui_issues_window();
-        self.sync_ui_issue_description_window();
-    }
-
-    pub fn move_sprint_selection_up(&mut self) {
-        if self.state.active_sprint == 0 {
-            return;
-        }
-
-        self.state.active_issue = 0;
-        self.state.active_sprint -= 1;
-
-        if self.state.active_sprint - self.state.sprint_offset
-            >= self.ui.sprints.inner_size().height
-        {
-            self.state.sprint_offset -= 1;
-            self.sync_ui_sprints_window();
-        }
-
-        self.ui
-            .sprints
-            .set_selected(Some(self.state.active_sprint - self.state.sprint_offset));
-
-        self.sync_ui_issues_window();
-        self.sync_ui_issue_description_window();
-    }
-
-    fn sync_ui_issues_window(&mut self) {
-        let issues_table = self.state.issues[self.state.active_sprint][self.state.issue_offset..]
-            .iter()
-            .take(self.ui.issues.inner_size().height)
-            .map(|issue| {
-                vec![
-                    issue.name.clone(),
-                    issue.fields.status.clone(),
-                    issue.fields.kind.clone(),
-                    issue
-                        .fields
-                        .assignee
-                        .clone()
-                        .map(|assignee| {
-                            assignee
-                                .split(" ")
-                                .flat_map(|s| s.chars().nth(0))
-                                .take(3)
-                                .collect()
-                        })
-                        .unwrap_or_default(),
-                    issue.fields.summary.clone(),
-                ]
-            })
-            .collect();
-
-        self.ui.issues.change_table(issues_table);
-    }
-
-    fn sync_ui_sprints_window(&mut self) {
-        let sprints_list = self.state.sprints[self.state.sprint_offset..]
-            .iter()
-            .take(self.ui.sprints.inner_size().height)
-            .map(|sprint| sprint.name.clone())
-            .collect();
-
-        self.ui.sprints.change_list(sprints_list);
-    }
-
-    pub fn input(&self) -> std::io::Result<std::io::Bytes<std::fs::File>> {
-        self.ui.terminal.tty()
+        State { sprints, issues }
     }
 }
 
 pub struct Ui {
-    terminal: Terminal,
+    pub active_window: Window,
+    sprint_offset: usize,
+    active_sprint: usize,
+    issue_offset: usize,
+    active_issue: usize,
+
     sprints: tui::ItemList,
     issues: tui::Table,
     issue_description: tui::Text,
 }
 
 impl Ui {
-    fn new(terminal: Terminal) -> Ui {
-        let rendering_region = terminal.rendering_region();
+    pub fn new(rendering_region: RenderingRegion) -> Ui {
         let (left, mut right) = rendering_region.split_vertically_at(0.40);
         let (mut top, mut botton) = left.split_hotizontally_at(0.2);
 
@@ -306,19 +78,204 @@ impl Ui {
         );
 
         Ui {
-            terminal,
+            active_sprint: 0,
+            sprint_offset: 0,
+            active_issue: 0,
+            issue_offset: 0,
+            active_window: Window::Sprints,
             sprints,
             issues,
             issue_description,
         }
     }
 
-    pub fn render(&mut self) {
-        self.sprints.render(&mut self.terminal.buffer);
-        self.issues.render(&mut self.terminal.buffer);
-        self.issue_description.render(&mut self.terminal.buffer);
+    pub fn initial_state(&mut self, state: &State) {
+        self.active_sprint = 0;
+        self.sprint_offset = 0;
+        self.active_issue = 0;
+        self.issue_offset = 0;
+        self.active_window = Window::Sprints;
 
-        self.terminal.draw();
+        self.sync_issues_window(state);
+        self.sync_issue_description_window(state);
+        self.sync_sprints_window(state);
+        self.sprints.set_selected(Some(self.active_sprint));
+        self.sprints.set_border_color(Color::Green);
+    }
+
+    pub fn sync_issues_window(&mut self, state: &State) {
+        let issues_table = state.issues[self.active_sprint][self.issue_offset..]
+            .iter()
+            .take(self.issues.inner_size().height)
+            .map(|issue| {
+                vec![
+                    issue.name.clone(),
+                    issue.fields.status.clone(),
+                    issue.fields.kind.clone(),
+                    issue
+                        .fields
+                        .assignee
+                        .clone()
+                        .map(|assignee| {
+                            assignee
+                                .split(" ")
+                                .flat_map(|s| s.chars().nth(0))
+                                .take(3)
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    issue.fields.summary.clone(),
+                ]
+            })
+            .collect();
+
+        self.issues.change_table(issues_table);
+    }
+
+    pub fn sync_issue_description_window(&mut self, state: &State) {
+        self.issue_description.change_text(
+            state.issues[self.active_sprint][self.active_issue]
+                .fields
+                .description
+                .clone(),
+        );
+    }
+
+    pub fn sync_sprints_window(&mut self, state: &State) {
+        let sprints_list = state.sprints[self.sprint_offset..]
+            .iter()
+            .take(self.sprints.inner_size().height)
+            .map(|sprint| sprint.name.clone())
+            .collect();
+
+        self.sprints.change_list(sprints_list);
+    }
+
+    pub fn render(&mut self, buffer: &mut Buffer) {
+        self.sprints.render(buffer);
+        self.issues.render(buffer);
+        self.issue_description.render(buffer);
+    }
+
+    pub fn select_sprints_window(&mut self) {
+        match self.active_window {
+            Window::Description => self.issue_description.set_border_color(Color::Default),
+            Window::Issues => {
+                self.issues.set_border_color(Color::Default);
+                self.issues.set_selected(None);
+            }
+            Window::Sprints => return,
+        };
+
+        self.active_window = Window::Sprints;
+        self.sprints.set_border_color(Color::Green);
+        self.sprints.set_selected(Some(self.active_sprint));
+    }
+
+    pub fn select_issues_window(&mut self) {
+        match self.active_window {
+            Window::Description => self.issue_description.set_border_color(Color::Default),
+            Window::Sprints => {
+                self.sprints.set_border_color(Color::Default);
+                self.sprints.set_selected(None);
+            }
+            Window::Issues => return,
+        };
+        self.active_window = Window::Issues;
+        self.issues.set_border_color(Color::Green);
+        self.issues.set_selected(Some(self.active_issue));
+    }
+
+    pub fn select_issue_description_window(&mut self) {
+        match self.active_window {
+            Window::Sprints => {
+                self.issue_description.set_border_color(Color::Default);
+                self.sprints.set_selected(None);
+            }
+            Window::Issues => {
+                self.issues.set_border_color(Color::Default);
+                self.issues.set_selected(None);
+            }
+            Window::Description => return,
+        };
+
+        self.active_window = Window::Description;
+        self.issue_description.set_border_color(Color::Green);
+    }
+
+    pub fn move_issue_selection_down(&mut self, state: &State) {
+        if self.active_issue >= state.issues[self.active_sprint].len() - 1 {
+            return;
+        };
+
+        self.active_issue += 1;
+
+        if self.active_issue - self.issue_offset >= self.issues.inner_size().height {
+            self.issue_offset += 1;
+            self.sync_issues_window(state);
+        }
+
+        self.issues
+            .set_selected(Some(self.active_issue - self.issue_offset));
+
+        self.sync_issue_description_window(state);
+    }
+
+    pub fn move_issue_selection_up(&mut self, state: &State) {
+        if self.active_issue <= 0 {
+            return;
+        };
+
+        self.active_issue -= 1;
+
+        if self.active_issue - self.issue_offset >= self.issues.inner_size().height {
+            self.issue_offset -= 1;
+            self.sync_issues_window(state);
+        }
+
+        self.issues
+            .set_selected(Some(self.active_issue - self.issue_offset));
+        self.sync_issue_description_window(state);
+    }
+
+    pub fn move_sprint_selection_down(&mut self, state: &State) {
+        if self.active_sprint >= state.sprints.len() - 1 {
+            return;
+        }
+
+        self.active_sprint += 1;
+        self.active_issue = 0;
+
+        if self.active_sprint - self.sprint_offset >= self.sprints.inner_size().height {
+            self.sprint_offset += 1;
+            self.sync_sprints_window(state);
+        }
+
+        self.sprints
+            .set_selected(Some(self.active_sprint - self.sprint_offset));
+
+        self.sync_issues_window(state);
+        self.sync_issue_description_window(state);
+    }
+
+    pub fn move_sprint_selection_up(&mut self, state: &State) {
+        if self.active_sprint == 0 {
+            return;
+        }
+
+        self.active_issue = 0;
+        self.active_sprint -= 1;
+
+        if self.active_sprint - self.sprint_offset >= self.sprints.inner_size().height {
+            self.sprint_offset -= 1;
+            self.sync_sprints_window(state);
+        }
+
+        self.sprints
+            .set_selected(Some(self.active_sprint - self.sprint_offset));
+
+        self.sync_issues_window(state);
+        self.sync_issue_description_window(state);
     }
 }
 
