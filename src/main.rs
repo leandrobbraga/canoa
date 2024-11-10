@@ -35,26 +35,17 @@ fn main() {
         let jira = Jira::new(&user, &token, host);
         loop {
             let state = State::new(&jira, &board_id);
-
-            if matches!(
-                state_sender.try_send(Event::State(state)),
-                Err(mpsc::TrySendError::Disconnected(_))
-            ) {
-                break;
-            }
-
+            state_sender.send(Event::State(state)).unwrap();
             std::thread::sleep(std::time::Duration::from_secs(30))
         }
     });
 
     // This thread receive user input in the background
-    let input_sender = sender;
     std::thread::spawn(move || loop {
         let Some(input) = inputs.next().map(|input| input.unwrap()) else {
             break;
         };
-
-        input_sender.send(Event::Input(input)).unwrap();
+        sender.send(Event::Input(input)).unwrap();
     });
 
     loop {
