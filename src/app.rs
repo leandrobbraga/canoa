@@ -1,6 +1,7 @@
 use crate::jira::{Issue, Jira, Sprint};
 use crate::tui::{self, Buffer, Color, RenderingRegion, Widget};
 
+#[derive(Default)]
 pub struct State {
     pub sprints: Vec<Sprint>,
     pub issues: Vec<Vec<Issue>>,
@@ -46,6 +47,8 @@ pub struct Ui {
     issue_offset: usize,
     active_issue: usize,
 
+    state: State,
+
     sprints: tui::ItemList,
     issues: tui::Table,
     issue_description: tui::Text,
@@ -82,6 +85,7 @@ impl Ui {
             sprint_offset: 0,
             active_issue: 0,
             issue_offset: 0,
+            state: State::default(),
             active_window: Window::Sprints,
             sprints,
             issues,
@@ -89,22 +93,23 @@ impl Ui {
         }
     }
 
-    pub fn initial_state(&mut self, state: &State) {
+    pub fn update_state(&mut self, state: State) {
         self.active_sprint = 0;
         self.sprint_offset = 0;
         self.active_issue = 0;
         self.issue_offset = 0;
         self.active_window = Window::Sprints;
+        self.state = state;
 
-        self.sync_issues_window(state);
-        self.sync_issue_description_window(state);
-        self.sync_sprints_window(state);
+        self.sync_issues_window();
+        self.sync_issue_description_window();
+        self.sync_sprints_window();
         self.sprints.set_selected(Some(self.active_sprint));
         self.sprints.set_border_color(Color::Green);
     }
 
-    pub fn sync_issues_window(&mut self, state: &State) {
-        let issues_table = state.issues[self.active_sprint][self.issue_offset..]
+    pub fn sync_issues_window(&mut self) {
+        let issues_table = self.state.issues[self.active_sprint][self.issue_offset..]
             .iter()
             .take(self.issues.inner_size().height)
             .map(|issue| {
@@ -132,17 +137,17 @@ impl Ui {
         self.issues.change_table(issues_table);
     }
 
-    pub fn sync_issue_description_window(&mut self, state: &State) {
+    pub fn sync_issue_description_window(&mut self) {
         self.issue_description.change_text(
-            state.issues[self.active_sprint][self.active_issue]
+            self.state.issues[self.active_sprint][self.active_issue]
                 .fields
                 .description
                 .clone(),
         );
     }
 
-    pub fn sync_sprints_window(&mut self, state: &State) {
-        let sprints_list = state.sprints[self.sprint_offset..]
+    pub fn sync_sprints_window(&mut self) {
+        let sprints_list = self.state.sprints[self.sprint_offset..]
             .iter()
             .take(self.sprints.inner_size().height)
             .map(|sprint| sprint.name.clone())
@@ -203,8 +208,8 @@ impl Ui {
         self.issue_description.set_border_color(Color::Green);
     }
 
-    pub fn move_issue_selection_down(&mut self, state: &State) {
-        if self.active_issue >= state.issues[self.active_sprint].len() - 1 {
+    pub fn move_issue_selection_down(&mut self) {
+        if self.active_issue >= self.state.issues[self.active_sprint].len() - 1 {
             return;
         };
 
@@ -212,16 +217,16 @@ impl Ui {
 
         if self.active_issue - self.issue_offset >= self.issues.inner_size().height {
             self.issue_offset += 1;
-            self.sync_issues_window(state);
+            self.sync_issues_window();
         }
 
         self.issues
             .set_selected(Some(self.active_issue - self.issue_offset));
 
-        self.sync_issue_description_window(state);
+        self.sync_issue_description_window();
     }
 
-    pub fn move_issue_selection_up(&mut self, state: &State) {
+    pub fn move_issue_selection_up(&mut self) {
         if self.active_issue <= 0 {
             return;
         };
@@ -230,16 +235,16 @@ impl Ui {
 
         if self.active_issue - self.issue_offset >= self.issues.inner_size().height {
             self.issue_offset -= 1;
-            self.sync_issues_window(state);
+            self.sync_issues_window();
         }
 
         self.issues
             .set_selected(Some(self.active_issue - self.issue_offset));
-        self.sync_issue_description_window(state);
+        self.sync_issue_description_window();
     }
 
-    pub fn move_sprint_selection_down(&mut self, state: &State) {
-        if self.active_sprint >= state.sprints.len() - 1 {
+    pub fn move_sprint_selection_down(&mut self) {
+        if self.active_sprint >= self.state.sprints.len() - 1 {
             return;
         }
 
@@ -248,17 +253,17 @@ impl Ui {
 
         if self.active_sprint - self.sprint_offset >= self.sprints.inner_size().height {
             self.sprint_offset += 1;
-            self.sync_sprints_window(state);
+            self.sync_sprints_window();
         }
 
         self.sprints
             .set_selected(Some(self.active_sprint - self.sprint_offset));
 
-        self.sync_issues_window(state);
-        self.sync_issue_description_window(state);
+        self.sync_issues_window();
+        self.sync_issue_description_window();
     }
 
-    pub fn move_sprint_selection_up(&mut self, state: &State) {
+    pub fn move_sprint_selection_up(&mut self) {
         if self.active_sprint == 0 {
             return;
         }
@@ -268,14 +273,14 @@ impl Ui {
 
         if self.active_sprint - self.sprint_offset >= self.sprints.inner_size().height {
             self.sprint_offset -= 1;
-            self.sync_sprints_window(state);
+            self.sync_sprints_window();
         }
 
         self.sprints
             .set_selected(Some(self.active_sprint - self.sprint_offset));
 
-        self.sync_issues_window(state);
-        self.sync_issue_description_window(state);
+        self.sync_issues_window();
+        self.sync_issue_description_window();
     }
 }
 
@@ -286,7 +291,7 @@ pub enum Window {
     Sprints,
 }
 
-// TODO: Sync the AppState every so often
+// TODO: Sync the State every so often
 // TODO: The issue name is cut when it's too long, it might be useful to add it in the description
 //       screen somehow
 // TODO: Add '/' to filter issues or sprints
