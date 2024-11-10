@@ -16,6 +16,7 @@ pub struct Sprint {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Issue {
+    pub id: String,
     #[serde(rename(deserialize = "key"))]
     pub name: String,
     pub fields: IssueFields,

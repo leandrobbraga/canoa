@@ -55,7 +55,7 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn new(rendering_region: RenderingRegion) -> Ui {
+    pub fn new(rendering_region: RenderingRegion, initial_state: State) -> Ui {
         let (left, mut right) = rendering_region.split_vertically_at(0.40);
         let (mut top, mut botton) = left.split_hotizontally_at(0.2);
 
@@ -80,29 +80,45 @@ impl Ui {
             tui::HorizontalAlignment::Left,
         );
 
-        Ui {
+        let mut ui = Ui {
             active_sprint: 0,
             sprint_offset: 0,
             active_issue: 0,
             issue_offset: 0,
-            state: State::default(),
+            state: initial_state,
             active_window: Window::Sprints,
             sprints,
             issues,
             issue_description,
-        }
+        };
+
+        // We need to do the initial sync to show the data into the terminal
+        ui.sync_state();
+
+        ui
     }
 
     pub fn update_state(&mut self, state: State) {
-        // FIXME: This resets the state to the 0 position which is quite anoying, we might need to
-        //        track which issue/sprint we're indexing to avoid disrupting the user experience
-        self.active_sprint = 0;
-        self.sprint_offset = 0;
-        self.active_issue = 0;
-        self.issue_offset = 0;
-        self.active_window = Window::Sprints;
+        let current_sprint_id = self.state.sprints[self.sprint_offset].id;
+        let current_issue_id = &self.state.issues[self.sprint_offset][self.issue_offset].id;
+
+        self.sprint_offset = state
+            .sprints
+            .iter()
+            .position(|sprint| sprint.id == current_sprint_id)
+            .unwrap_or(0);
+
+        self.issue_offset = self.state.issues[self.sprint_offset]
+            .iter()
+            .position(|issue| &issue.id == current_issue_id)
+            .unwrap_or(0);
+
         self.state = state;
 
+        self.sync_state();
+    }
+
+    pub fn sync_state(&mut self) {
         self.sync_issues_window();
         self.sync_issue_description_window();
         self.sync_sprints_window();
