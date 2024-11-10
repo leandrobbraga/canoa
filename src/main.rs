@@ -84,4 +84,5 @@ fn main() {
 }
 
 // TODO: Allow filtering issues by who is assigned to it
+// TODO: Add an screen containing state update logs
 // FIXME: Perform better error handling instead of unwrapping everything.

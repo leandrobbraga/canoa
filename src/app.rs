@@ -94,6 +94,8 @@ impl Ui {
     }
 
     pub fn update_state(&mut self, state: State) {
+        // FIXME: This resets the state to the 0 position which is quite anoying, we might need to
+        //        track which issue/sprint we're indexing to avoid disrupting the user experience
         self.active_sprint = 0;
         self.sprint_offset = 0;
         self.active_issue = 0;
