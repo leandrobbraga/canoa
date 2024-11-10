@@ -1,29 +1,31 @@
 //! Jira's API implementation
 use std::iter;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub struct Jira {
     authorization: Box<str>,
     host: Box<str>,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct Sprint {
     pub id: u32,
     pub name: String,
 }
 
+/// The API version contains some special deserializing code to deal with Jira's API.
 #[derive(Clone, Deserialize, Debug)]
-pub struct Issue {
+pub struct APIIssue {
     pub id: String,
     #[serde(rename(deserialize = "key"))]
     pub name: String,
-    pub fields: IssueFields,
+    pub fields: APIIssueFields,
 }
 
+/// The API version contains some special deserializing code to deal with Jira's API.
 #[derive(Clone, Deserialize, Debug)]
-pub struct IssueFields {
+pub struct APIIssueFields {
     pub summary: String,
     #[serde(
         rename(deserialize = "issuetype"),
@@ -33,6 +35,44 @@ pub struct IssueFields {
     #[serde(deserialize_with = "deserialize_assigne")]
     pub assignee: Option<String>,
     #[serde(deserialize_with = "deserialize_status")]
+    pub status: String,
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct Issue {
+    pub id: String,
+    pub name: String,
+    pub fields: IssueFields,
+}
+
+impl From<APIIssue> for Issue {
+    fn from(value: APIIssue) -> Self {
+        Issue {
+            id: value.id,
+            name: value.name,
+            fields: value.fields.into(),
+        }
+    }
+}
+
+impl From<APIIssueFields> for IssueFields {
+    fn from(value: APIIssueFields) -> Self {
+        IssueFields {
+            summary: value.summary,
+            kind: value.kind,
+            assignee: value.assignee,
+            status: value.status,
+            description: value.description,
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct IssueFields {
+    pub summary: String,
+    pub kind: String,
+    pub assignee: Option<String>,
     pub status: String,
     pub description: Option<String>,
 }
@@ -88,7 +128,7 @@ impl Jira {
     pub fn get_sprint_issues(&self, board_id: &str, sprint_id: u32) -> Vec<Issue> {
         #[derive(Deserialize)]
         struct Response {
-            issues: Vec<Issue>,
+            issues: Vec<APIIssue>,
         }
 
         let response: Response = ureq::get(&format!(
@@ -105,7 +145,11 @@ impl Jira {
         .into_json()
         .unwrap();
 
-        response.issues
+        response
+            .issues
+            .into_iter()
+            .map(|issue| issue.into())
+            .collect()
     }
 
     pub fn get_board_active_and_future_sprints(&self, board_id: &str) -> Vec<Sprint> {
@@ -132,7 +176,7 @@ impl Jira {
     pub fn get_backlog_issues(&self, board_id: &str) -> Vec<Issue> {
         #[derive(Deserialize)]
         struct Response {
-            issues: Vec<Issue>,
+            issues: Vec<APIIssue>,
         }
 
         let response: Response = ureq::get(&format!(
@@ -149,7 +193,11 @@ impl Jira {
         .into_json()
         .unwrap();
 
-        response.issues
+        response
+            .issues
+            .into_iter()
+            .map(|issue| issue.into())
+            .collect()
     }
 }
 

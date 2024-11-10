@@ -1,7 +1,8 @@
 use crate::jira::{Issue, Jira, Sprint};
 use crate::tui::{self, Buffer, Color, RenderingRegion, Widget};
+use serde::{Deserialize, Serialize};
 
-#[derive(Default)]
+#[derive(Default, Deserialize, Serialize)]
 pub struct State {
     pub sprints: Vec<Sprint>,
     pub issues: Vec<Vec<Issue>>,
@@ -96,6 +97,23 @@ impl Ui {
         ui.sync_state();
 
         ui
+    }
+
+    pub fn load_state() -> Option<State> {
+        let home_directory = std::env::var("HOME").unwrap();
+        let Ok(file) = std::fs::File::open(format!("{home_directory}/.canoa.json")) else {
+            return None;
+        };
+        let file = std::io::BufReader::new(file);
+        let state = serde_json::from_reader(file).unwrap();
+        Some(state)
+    }
+
+    pub fn save_state(&self) {
+        let home_directory = std::env::var("HOME").unwrap();
+        let file = std::fs::File::create(format!("{home_directory}/.canoa.json")).unwrap();
+        let file = std::io::BufWriter::new(file);
+        serde_json::to_writer(file, &self.state).unwrap();
     }
 
     pub fn update_state(&mut self, state: State) {

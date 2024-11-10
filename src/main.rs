@@ -26,7 +26,11 @@ fn main() {
     let mut terminal = Terminal::try_new().unwrap();
     let mut inputs = terminal.tty().unwrap();
     let jira = Jira::new(&user, &token, host);
-    let initial_state = State::new(&jira, &board_id);
+
+    let initial_state = match Ui::load_state() {
+        Some(state) => state,
+        None => State::new(&jira, &board_id),
+    };
 
     let mut ui = Ui::new(terminal.rendering_region(), initial_state);
 
@@ -60,7 +64,10 @@ fn main() {
                     b'1' => ui.select_sprints_window(),
                     b'2' => ui.select_issues_window(),
                     b'3' => ui.select_issue_description_window(),
-                    b'q' => break,
+                    b'q' => {
+                        ui.save_state();
+                        break;
+                    }
                     _ => (),
                 };
 
@@ -85,5 +92,4 @@ fn main() {
 
 // TODO: Allow filtering issues by who is assigned to it
 // TODO: Add an screen containing state update logs
-// TODO: Recover the initial state from a local storage
 // FIXME: Perform better error handling instead of unwrapping everything.
