@@ -1,5 +1,5 @@
 use crate::jira::{Issue, Jira, Sprint};
-use crate::tui::{self, Buffer, Color, RenderingRegion, Widget};
+use crate::tui::{self, Color, Terminal, Widget};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Deserialize, Serialize)]
@@ -42,6 +42,8 @@ impl State {
 }
 
 pub struct Ui {
+    terminal: Terminal,
+
     pub active_window: Window,
     sprint_offset: usize,
     active_sprint: usize,
@@ -56,8 +58,8 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn new(rendering_region: RenderingRegion, initial_state: State) -> Ui {
-        let (left, mut right) = rendering_region.split_vertically_at(0.40);
+    pub fn new(terminal: Terminal, initial_state: State) -> Ui {
+        let (left, mut right) = terminal.rendering_region().split_vertically_at(0.40);
         let (mut top, mut botton) = left.split_hotizontally_at(0.2);
 
         top.set_title(Some("[ 1 ] Sprints ".into()));
@@ -82,6 +84,7 @@ impl Ui {
         );
 
         let mut ui = Ui {
+            terminal,
             active_sprint: 0,
             sprint_offset: 0,
             active_issue: 0,
@@ -192,10 +195,12 @@ impl Ui {
         self.sprints.change_list(sprints_list);
     }
 
-    pub fn render(&mut self, buffer: &mut Buffer) {
-        self.sprints.render(buffer);
-        self.issues.render(buffer);
-        self.issue_description.render(buffer);
+    pub fn render(&mut self) {
+        self.sprints.render(&mut self.terminal.buffer);
+        self.issues.render(&mut self.terminal.buffer);
+        self.issue_description.render(&mut self.terminal.buffer);
+
+        self.terminal.draw();
     }
 
     pub fn select_sprints_window(&mut self) {

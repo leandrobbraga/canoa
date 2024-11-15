@@ -23,7 +23,8 @@ fn main() {
         board_id,
         host,
     } = config::configuration().unwrap();
-    let mut terminal = Terminal::try_new().unwrap();
+
+    let terminal = Terminal::try_new().unwrap();
     let mut inputs = terminal.tty().unwrap();
     let jira = Jira::new(&user, &token, host);
 
@@ -32,7 +33,7 @@ fn main() {
         None => State::new(&jira, &board_id),
     };
 
-    let mut ui = Ui::new(terminal.rendering_region(), initial_state);
+    let mut ui = Ui::new(terminal, initial_state);
 
     let (sender, receiver) = mpsc::sync_channel(0);
 
@@ -53,8 +54,7 @@ fn main() {
     });
 
     loop {
-        ui.render(&mut terminal.buffer);
-        terminal.draw();
+        ui.render();
 
         match receiver.recv().unwrap() {
             Event::State(state) => ui.update_state(state),
