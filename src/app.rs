@@ -112,6 +112,8 @@ impl Ui {
 
         // We need to do the initial sync to show the data into the terminal
         ui.sync_state();
+        ui.sprints.set_selected(Some(ui.active_sprint));
+        ui.sprints.set_border_color(Color::Green);
 
         ui
     }
@@ -162,7 +164,6 @@ impl Ui {
         self.logs.add_item(format!(
             "{hours:0>2}:{minutes:0>2}:{seconds:0>2} INFO: Synced state"
         ));
-
         self.sync_state();
     }
 
@@ -170,8 +171,6 @@ impl Ui {
         self.sync_issues_window();
         self.sync_issue_description_window();
         self.sync_sprints_window();
-        self.sprints.set_selected(Some(self.active_sprint));
-        self.sprints.set_border_color(Color::Green);
     }
 
     pub fn sync_issues_window(&mut self) {
