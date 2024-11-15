@@ -1,7 +1,8 @@
+use std::time::UNIX_EPOCH;
+
 use crate::jira::{Issue, Jira, Sprint};
 use crate::tui::{self, Color, Terminal, Widget};
 use serde::{Deserialize, Serialize};
-use time::{OffsetDateTime, PrimitiveDateTime};
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct State {
@@ -149,12 +150,18 @@ impl Ui {
 
         self.state = state;
 
-        let time = OffsetDateTime::now_utc();
-        // This removes some noise from the formatted string without adding a bunch of dependencies
-        // through the formatting feature
-        let time = PrimitiveDateTime::new(time.date(), time.time());
+        let time_elapsed_since_unix_epoch = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let secs_today = time_elapsed_since_unix_epoch % (24 * 60 * 60);
+        let hours = secs_today / (60 * 60);
+        let minutes = secs_today % (60 * 60) / 60;
+        let seconds = secs_today % 60;
 
-        self.logs.add_item(format!("{} INFO: Synced state", time));
+        self.logs.add_item(format!(
+            "{hours:0>2}:{minutes:0>2}:{seconds:0>2} INFO: Synced state"
+        ));
 
         self.sync_state();
     }
