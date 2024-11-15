@@ -1,6 +1,7 @@
 use crate::jira::{Issue, Jira, Sprint};
 use crate::tui::{self, Color, Terminal, Widget};
 use serde::{Deserialize, Serialize};
+use time::{OffsetDateTime, PrimitiveDateTime};
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct State {
@@ -55,22 +56,26 @@ pub struct Ui {
     sprints: tui::ItemList,
     issues: tui::Table,
     issue_description: tui::Text,
+    logs: tui::ItemList,
 }
 
 impl Ui {
     pub fn new(terminal: Terminal, initial_state: State) -> Ui {
-        let (left, mut right) = terminal.rendering_region().split_vertically_at(0.40);
-        let (mut top, mut botton) = left.split_hotizontally_at(0.2);
+        let rendering_region = terminal.rendering_region();
+        let (top, mut logs) = rendering_region.split_hotizontally_at(0.9);
 
-        top.set_title(Some("[ 1 ] Sprints ".into()));
-        let sprints = top.item_list(
+        let (left, mut right) = top.split_vertically_at(0.40);
+        let (mut sprints, mut issues) = left.split_hotizontally_at(0.2);
+
+        sprints.set_title(Some("[ 1 ] Sprints ".into()));
+        let sprints = sprints.item_list(
             Default::default(),
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
         );
 
-        botton.set_title(Some("[ 2 ] Issues ".into()));
-        let issues = botton.table(
+        issues.set_title(Some("[ 2 ] Issues ".into()));
+        let issues = issues.table(
             Default::default(),
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
@@ -78,6 +83,13 @@ impl Ui {
 
         right.set_title(Some("[ 3 ] Description ".into()));
         let issue_description = right.text(
+            Default::default(),
+            tui::VerticalAlignment::Top,
+            tui::HorizontalAlignment::Left,
+        );
+
+        logs.set_title(Some("Logs".into()));
+        let logs = logs.item_list(
             Default::default(),
             tui::VerticalAlignment::Top,
             tui::HorizontalAlignment::Left,
@@ -94,6 +106,7 @@ impl Ui {
             sprints,
             issues,
             issue_description,
+            logs,
         };
 
         // We need to do the initial sync to show the data into the terminal
@@ -135,6 +148,13 @@ impl Ui {
             .unwrap_or(0);
 
         self.state = state;
+
+        let time = OffsetDateTime::now_utc();
+        // This removes some noise from the formatted string without adding a bunch of dependencies
+        // through the formatting feature
+        let time = PrimitiveDateTime::new(time.date(), time.time());
+
+        self.logs.add_item(format!("{} INFO: Synced state", time));
 
         self.sync_state();
     }
@@ -199,6 +219,7 @@ impl Ui {
         self.sprints.render(&mut self.terminal.buffer);
         self.issues.render(&mut self.terminal.buffer);
         self.issue_description.render(&mut self.terminal.buffer);
+        self.logs.render(&mut self.terminal.buffer);
 
         self.terminal.draw();
     }

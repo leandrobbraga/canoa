@@ -606,6 +606,14 @@ impl ItemList {
         }
     }
 
+    pub fn add_item(&mut self, item: String) {
+        // TODO: The UI should not know about app logic like this
+        if self.items.len() >= self.rendering_region.inner_size().height {
+            self.items.swap_remove(0);
+        }
+        self.items.push(item)
+    }
+
     // TODO: Remove duplicate code
     pub fn change_list(&mut self, items: Vec<String>) {
         let inner_size = self.rendering_region.inner_size();

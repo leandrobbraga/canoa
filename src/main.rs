@@ -92,4 +92,5 @@ fn main() {
 
 // TODO: Allow filtering issues by who is assigned to it
 // TODO: Add an screen containing state update logs
+// TODO: Avoid polluting the user terminal after the user quits the app
 // FIXME: Perform better error handling instead of unwrapping everything.
