@@ -11,6 +11,8 @@ use config::Config;
 use jira::Jira;
 use tui::Terminal;
 
+const CTRL_C: u8 = 3;
+
 enum Event {
     State(State),
     Input(u8),
@@ -64,7 +66,7 @@ fn main() {
                     b'1' => ui.select_sprints_window(),
                     b'2' => ui.select_issues_window(),
                     b'3' => ui.select_issue_description_window(),
-                    b'q' => {
+                    b'q' | CTRL_C => {
                         ui.save_state();
                         break;
                     }
