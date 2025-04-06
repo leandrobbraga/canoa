@@ -83,6 +83,7 @@ impl Drop for Terminal {
             eprintln!("ERROR: Could not return the terminal to canonical mode, run 'reset' to force it back: {err}")
         };
 
+        Terminal::leave_alternate_screen();
         Terminal::make_cursor_visible();
     }
 }
@@ -102,6 +103,7 @@ impl Terminal {
 
         terminal.enable_raw_mode()?;
 
+        Terminal::enter_alternate_screen();
         Terminal::make_cursor_invisible();
 
         Ok(terminal)
@@ -197,6 +199,14 @@ impl Terminal {
                 height: size.row as usize,
             })
         }
+    }
+
+    fn enter_alternate_screen() {
+        print!("\x1b[?1049h");
+    }
+
+    fn leave_alternate_screen() {
+        print!("\x1b[?1049l");
     }
 
     fn clear_screen() {
