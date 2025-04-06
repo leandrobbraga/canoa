@@ -147,7 +147,7 @@ impl Terminal {
     }
 
     pub fn draw(&mut self) {
-        Terminal::clear_screen();
+        Terminal::move_cursor_to_home_position();
 
         // We always start with the Default color to ensure consistency
         let mut current_foreground_color = Color::Default;
@@ -209,8 +209,8 @@ impl Terminal {
         print!("\x1b[?1049l");
     }
 
-    fn clear_screen() {
-        print!("\x1b[2J");
+    fn move_cursor_to_home_position() {
+        print!("\x1B[H");
     }
 
     fn make_cursor_invisible() {
