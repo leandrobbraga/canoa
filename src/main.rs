@@ -41,18 +41,22 @@ fn main() {
 
     // This thread updates the state in the background
     let state_sender = sender.clone();
-    std::thread::spawn(move || loop {
-        let state = State::new(&jira, &board_id);
-        state_sender.send(Event::State(state)).unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(30))
+    std::thread::spawn(move || {
+        loop {
+            let state = State::new(&jira, &board_id);
+            state_sender.send(Event::State(state)).unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(30))
+        }
     });
 
     // This thread receive user input in the background
-    std::thread::spawn(move || loop {
-        let Some(input) = inputs.next().map(|input| input.unwrap()) else {
-            break;
-        };
-        sender.send(Event::Input(input)).unwrap();
+    std::thread::spawn(move || {
+        loop {
+            let Some(input) = inputs.next().map(|input| input.unwrap()) else {
+                break;
+            };
+            sender.send(Event::Input(input)).unwrap();
+        }
     });
 
     loop {

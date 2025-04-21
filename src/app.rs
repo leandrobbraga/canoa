@@ -295,7 +295,7 @@ impl Ui {
     }
 
     pub fn move_issue_selection_up(&mut self) {
-        if self.active_issue <= 0 {
+        if self.active_issue == 0 {
             return;
         };
 

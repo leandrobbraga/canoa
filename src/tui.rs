@@ -2,7 +2,7 @@
 //! It's inspired in the tiling window manager system, where the user always have the whole screen
 //! covered and it just splits it between different widgets.
 
-use std::io::{stdout, Read, Write};
+use std::io::{Read, Write, stdout};
 use std::ops::{Add, AddAssign};
 use std::{mem::MaybeUninit, os::fd::AsRawFd};
 
@@ -80,7 +80,9 @@ pub struct Terminal {
 impl Drop for Terminal {
     fn drop(&mut self) {
         if let Err(err) = self.disable_raw_mode() {
-            eprintln!("ERROR: Could not return the terminal to canonical mode, run 'reset' to force it back: {err}")
+            eprintln!(
+                "ERROR: Could not return the terminal to canonical mode, run 'reset' to force it back: {err}"
+            )
         };
 
         Terminal::leave_alternate_screen();
@@ -482,7 +484,7 @@ impl Text {
         size: Size,
         vertical_alignment: VerticalAlignment,
     ) -> usize {
-        let lines_count = HardwrappingText::new(text, size.width).into_iter().count();
+        let lines_count = HardwrappingText::new(text, size.width).count();
 
         match vertical_alignment {
             VerticalAlignment::Top => 1, // 1 for the border
@@ -498,7 +500,7 @@ impl Text {
             let text = text.replace('\t', "    ");
             // Some unicode characters are not rendered, breaking the UI
             // TODO: Find a scalable way to keep only "printable" characters
-            self.text = text.chars().filter(|c| !(*c == '\u{300}')).collect();
+            self.text = text.chars().filter(|c| *c != '\u{300}').collect();
         } else {
             self.text.clear();
         }
@@ -520,7 +522,6 @@ impl Widget for Text {
 
         for (line_index, line) in
             HardwrappingText::new(&self.text, self.rendering_region.inner_size().width)
-                .into_iter()
                 .take(self.rendering_region.inner_size().height)
                 .enumerate()
         {

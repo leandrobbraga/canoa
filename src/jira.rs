@@ -256,7 +256,7 @@ fn basic_authentication_header(user: &str, token: &str) -> Box<str> {
         }
 
         // Padding to fill the end
-        header.extend(iter::repeat(b'=').take(output_length - header.len()));
+        header.extend(iter::repeat_n(b'=', output_length - header.len()));
     }
 
     // SAFETY: The header is made of two parts: the 'Basic ' prefix and the Base64 encoded string,
