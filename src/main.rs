@@ -1,12 +1,11 @@
 mod app;
-mod commands;
 mod config;
 mod jira;
-mod tui;
+pub mod tui;
 
 use std::sync::mpsc;
 
-use app::{State, Ui, Window};
+use app::{App, State, Window};
 use config::Config;
 use jira::Jira;
 use tui::Terminal;
@@ -30,12 +29,12 @@ fn main() {
     let mut inputs = terminal.tty().unwrap();
     let jira = Jira::new(&user, &token, host);
 
-    let initial_state = match Ui::load_state() {
+    let initial_state = match App::load_state() {
         Some(state) => state,
         None => State::new(&jira, &board_id),
     };
 
-    let mut ui = Ui::new(terminal, initial_state);
+    let mut ui = App::new(terminal, initial_state);
 
     let (sender, receiver) = mpsc::sync_channel(0);
 
@@ -82,6 +81,7 @@ fn main() {
                     Window::Issues => match input {
                         b'j' => ui.move_issue_selection_down(),
                         b'k' => ui.move_issue_selection_up(),
+                        // b'/' => ui.select_filtering_window()
                         _ => (),
                     },
                     Window::Sprints => match input {

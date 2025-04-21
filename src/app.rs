@@ -1,7 +1,7 @@
 use std::time::UNIX_EPOCH;
 
 use crate::jira::{Issue, Jira, Sprint};
-use crate::tui::{self, Color, Terminal, Widget};
+use crate::tui::{self, Color, CommonWidget, Terminal, Widget};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Deserialize, Serialize)]
@@ -12,7 +12,7 @@ pub struct State {
 
 impl State {
     pub fn new(jira: &Jira, board_id: &str) -> State {
-        let (sprints, issues) = std::thread::scope(|scope| {
+        std::thread::scope(|scope| {
             let backlog = scope.spawn(|| jira.get_backlog_issues(board_id));
             let mut sprints = jira.get_board_active_and_future_sprints(board_id);
 
@@ -36,14 +36,12 @@ impl State {
                 .map(|handle| handle.join().unwrap())
                 .collect();
 
-            (sprints, issues)
-        });
-
-        State { sprints, issues }
+            State { sprints, issues }
+        })
     }
 }
 
-pub struct Ui {
+pub struct App {
     terminal: Terminal,
 
     pub active_window: Window,
@@ -60,43 +58,32 @@ pub struct Ui {
     logs: tui::ItemList,
 }
 
-impl Ui {
-    pub fn new(terminal: Terminal, initial_state: State) -> Ui {
+impl App {
+    pub fn new(terminal: Terminal, initial_state: State) -> App {
         let rendering_region = terminal.rendering_region();
-        let (top, mut logs) = rendering_region.split_hotizontally_at(0.9);
 
-        let (left, mut right) = top.split_vertically_at(0.40);
-        let (mut sprints, mut issues) = left.split_hotizontally_at(0.2);
+        let (top, mut logs) = rendering_region.split_horizontally_percentage(0.9);
+
+        let (left, mut issue_description) = top.split_vertically_at_percentage(0.40);
+        let (mut sprints, mut issues) = left.split_horizontally_percentage(0.2);
 
         sprints.set_title(Some("[ 1 ] Sprints ".into()));
-        let sprints = sprints.item_list(
-            Default::default(),
-            tui::VerticalAlignment::Top,
-            tui::HorizontalAlignment::Left,
-        );
+        sprints.set_border(Some(Color::Default));
+        let sprints = sprints.item_list();
 
         issues.set_title(Some("[ 2 ] Issues ".into()));
-        let issues = issues.table(
-            Default::default(),
-            tui::VerticalAlignment::Top,
-            tui::HorizontalAlignment::Left,
-        );
+        issues.set_border(Some(Color::Default));
+        let issues = issues.table();
 
-        right.set_title(Some("[ 3 ] Description ".into()));
-        let issue_description = right.text(
-            Default::default(),
-            tui::VerticalAlignment::Top,
-            tui::HorizontalAlignment::Left,
-        );
+        issue_description.set_title(Some("[ 3 ] Description ".into()));
+        issue_description.set_border(Some(Color::Default));
+        let issue_description = issue_description.text();
 
         logs.set_title(Some("Logs".into()));
-        let logs = logs.item_list(
-            Default::default(),
-            tui::VerticalAlignment::Top,
-            tui::HorizontalAlignment::Left,
-        );
+        logs.set_border(Some(Color::Default));
+        let logs = logs.item_list();
 
-        let mut ui = Ui {
+        let mut ui = App {
             terminal,
             active_sprint: 0,
             sprint_offset: 0,
@@ -113,7 +100,7 @@ impl Ui {
         // We need to do the initial sync to show the data into the terminal
         ui.sync_state();
         ui.sprints.set_selected(Some(ui.active_sprint));
-        ui.sprints.set_border_color(Color::Green);
+        ui.sprints.set_border(Some(Color::Green));
 
         ui
     }
@@ -156,14 +143,22 @@ impl Ui {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let secs_today = time_elapsed_since_unix_epoch % (24 * 60 * 60);
-        let hours = secs_today / (60 * 60);
-        let minutes = secs_today % (60 * 60) / 60;
-        let seconds = secs_today % 60;
 
-        self.logs.add_item(format!(
+        let secs_until_now = time_elapsed_since_unix_epoch % (24 * 60 * 60);
+
+        let hours = secs_until_now / (60 * 60);
+        let minutes = secs_until_now % (60 * 60) / 60;
+        let seconds = secs_until_now % 60;
+
+        let logs_max_count = self.logs.usable_size().height;
+        let log_items = self.logs.get_items_mut();
+        if log_items.len() >= logs_max_count {
+            log_items.swap_remove(0);
+        }
+        log_items.push(format!(
             "{hours:0>2}:{minutes:0>2}:{seconds:0>2} INFO: Synced state"
         ));
+
         self.sync_state();
 
         match self.active_window {
@@ -182,7 +177,7 @@ impl Ui {
     pub fn sync_issues_window(&mut self) {
         let issues_table = self.state.issues[self.active_sprint][self.issue_offset..]
             .iter()
-            .take(self.issues.inner_size().height)
+            .take(self.issues.usable_size().height)
             .map(|issue| {
                 vec![
                     issue.name.clone(),
@@ -209,7 +204,7 @@ impl Ui {
     }
 
     pub fn sync_issue_description_window(&mut self) {
-        self.issue_description.change_text(
+        self.issue_description.set_text(
             self.state.issues[self.active_sprint][self.active_issue]
                 .fields
                 .description
@@ -220,7 +215,7 @@ impl Ui {
     pub fn sync_sprints_window(&mut self) {
         let sprints_list = self.state.sprints[self.sprint_offset..]
             .iter()
-            .take(self.sprints.inner_size().height)
+            .take(self.sprints.usable_size().height)
             .map(|sprint| sprint.name.clone())
             .collect();
 
@@ -237,49 +232,37 @@ impl Ui {
     }
 
     pub fn select_sprints_window(&mut self) {
-        match self.active_window {
-            Window::Description => self.issue_description.set_border_color(Color::Default),
-            Window::Issues => {
-                self.issues.set_border_color(Color::Default);
-                self.issues.set_selected(None);
-            }
-            Window::Sprints => return,
-        };
-
+        self.unselect_windows();
         self.active_window = Window::Sprints;
-        self.sprints.set_border_color(Color::Green);
+        self.sprints.set_border(Some(Color::Green));
         self.sprints.set_selected(Some(self.active_sprint));
     }
 
     pub fn select_issues_window(&mut self) {
-        match self.active_window {
-            Window::Description => self.issue_description.set_border_color(Color::Default),
-            Window::Sprints => {
-                self.sprints.set_border_color(Color::Default);
-                self.sprints.set_selected(None);
-            }
-            Window::Issues => return,
-        };
+        self.unselect_windows();
         self.active_window = Window::Issues;
-        self.issues.set_border_color(Color::Green);
+        self.issues.set_border(Some(Color::Green));
         self.issues.set_selected(Some(self.active_issue));
     }
 
     pub fn select_issue_description_window(&mut self) {
+        self.unselect_windows();
+        self.active_window = Window::Description;
+        self.issue_description.set_border(Some(Color::Green));
+    }
+
+    fn unselect_windows(&mut self) {
         match self.active_window {
             Window::Sprints => {
-                self.issue_description.set_border_color(Color::Default);
+                self.issue_description.set_border(Some(Color::Default));
                 self.sprints.set_selected(None);
             }
             Window::Issues => {
-                self.issues.set_border_color(Color::Default);
+                self.issues.set_border(Some(Color::Default));
                 self.issues.set_selected(None);
             }
-            Window::Description => return,
+            Window::Description => self.issue_description.set_border(Some(Color::Default)),
         };
-
-        self.active_window = Window::Description;
-        self.issue_description.set_border_color(Color::Green);
     }
 
     pub fn move_issue_selection_down(&mut self) {
@@ -289,7 +272,7 @@ impl Ui {
 
         self.active_issue += 1;
 
-        if self.active_issue - self.issue_offset >= self.issues.inner_size().height {
+        if self.active_issue - self.issue_offset >= self.issues.usable_size().height {
             self.issue_offset += 1;
             self.sync_issues_window();
         }
@@ -307,7 +290,7 @@ impl Ui {
 
         self.active_issue -= 1;
 
-        if self.active_issue - self.issue_offset >= self.issues.inner_size().height {
+        if self.active_issue - self.issue_offset >= self.issues.usable_size().height {
             self.issue_offset -= 1;
             self.sync_issues_window();
         }
@@ -325,7 +308,7 @@ impl Ui {
         self.active_sprint += 1;
         self.active_issue = 0;
 
-        if self.active_sprint - self.sprint_offset >= self.sprints.inner_size().height {
+        if self.active_sprint - self.sprint_offset >= self.sprints.usable_size().height {
             self.sprint_offset += 1;
             self.sync_sprints_window();
         }
@@ -345,7 +328,7 @@ impl Ui {
         self.active_issue = 0;
         self.active_sprint -= 1;
 
-        if self.active_sprint - self.sprint_offset >= self.sprints.inner_size().height {
+        if self.active_sprint - self.sprint_offset >= self.sprints.usable_size().height {
             self.sprint_offset -= 1;
             self.sync_sprints_window();
         }
@@ -360,8 +343,8 @@ impl Ui {
 
 #[derive(Clone, Copy)]
 pub enum Window {
-    Issues,
     Description,
+    Issues,
     Sprints,
 }
 
