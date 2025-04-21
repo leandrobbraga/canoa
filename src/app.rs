@@ -136,16 +136,16 @@ impl Ui {
     }
 
     pub fn update_state(&mut self, state: State) {
-        let current_sprint_id = self.state.sprints[self.sprint_offset].id;
-        let current_issue_id = &self.state.issues[self.sprint_offset][self.issue_offset].id;
+        let current_sprint_id = self.state.sprints[self.active_sprint].id;
+        let current_issue_id = &self.state.issues[self.active_sprint][self.active_issue].id;
 
-        self.sprint_offset = state
+        self.active_sprint = state
             .sprints
             .iter()
             .position(|sprint| sprint.id == current_sprint_id)
             .unwrap_or(0);
 
-        self.issue_offset = self.state.issues[self.sprint_offset]
+        self.active_issue = state.issues[self.sprint_offset]
             .iter()
             .position(|issue| &issue.id == current_issue_id)
             .unwrap_or(0);
@@ -168,8 +168,8 @@ impl Ui {
 
         match self.active_window {
             Window::Description => (),
-            Window::Issues => self.issues.set_selected(Some(self.issue_offset)),
-            Window::Sprints => self.sprints.set_selected(Some(self.sprint_offset)),
+            Window::Issues => self.issues.set_selected(Some(self.active_issue)),
+            Window::Sprints => self.sprints.set_selected(Some(self.active_sprint)),
         }
     }
 
