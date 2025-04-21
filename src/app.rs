@@ -359,7 +359,6 @@ pub enum Window {
     Sprints,
 }
 
-// TODO: Sync the State every so often
 // TODO: The issue name is cut when it's too long, it might be useful to add it in the description
 //       screen somehow
 // TODO: Add '/' to filter issues or sprints
