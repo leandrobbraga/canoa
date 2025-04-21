@@ -165,6 +165,12 @@ impl Ui {
             "{hours:0>2}:{minutes:0>2}:{seconds:0>2} INFO: Synced state"
         ));
         self.sync_state();
+
+        match self.active_window {
+            Window::Description => (),
+            Window::Issues => self.issues.set_selected(Some(self.issue_offset)),
+            Window::Sprints => self.sprints.set_selected(Some(self.sprint_offset)),
+        }
     }
 
     pub fn sync_state(&mut self) {
